@@ -661,7 +661,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "2";
+const APP_VERSION = "3";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -1642,21 +1642,22 @@ function adminNoService(k, rows){
     <button class="btn" data-act="no-service-keep" ${S.noSvcBusy ? "disabled" : ""}>Cancel</button></div>`;
   return `<button class="btn no-svc-btn" data-act="no-service" data-date="${k}">❌ Mark ${esc(fmtShort(k))} as No Service</button>`;
 }
-/* Add Positions: one row per Security Name in the Roster that isn't on the date yet.
-   Service Category (and Call Time) are copied from the date's existing rows. */
+/* Add Pastors (Armor Bearers): one row per Assigned To pastor (the column's choices) that isn't on the date yet.
+   Service Category (and Call Time) are copied from the date's existing rows. The Armor Bearer is picked afterwards. */
+const pastorList = () => (S.placements || []).filter(svcFilled);
 const rosterPeople = () => S.items.filter(p => isProfile(p) && p.editable && !p.archived && !p.gone).sort((a, b) => Number(a.id) - Number(b.id));
 function templateMissing(rows){
   const have = rows.filter(i => !isNoService(i));
-  return rosterPeople().filter(p => !have.some(i => (p.email && i.email === p.email) || (p.fullName && lc(i.fullName) === lc(p.fullName))));
+  return pastorList().filter(x => !have.some(i => i.role === x));
 }
 function mostCommon(vals){ const n = {}; vals.forEach(v => { n[v] = (n[v] || 0) + 1; }); return Object.keys(n).sort((a, b) => n[b] - n[a])[0] || ""; }
 const templateCategory = rows => mostCommon(rows.filter(i => !isNoService(i) && svcFilled(i.category) && !NOT_A_SERVICE.includes(i.category)).map(i => i.category));
 const templateCallTime = rows => mostCommon(rows.filter(i => !isNoService(i) && i.call).map(i => i.call));
 function adminTemplate(k, rows){
   if (rows.some(isNoService)) return "";
-  const miss = templateMissing(rows), total = rosterPeople().length;
+  const miss = templateMissing(rows), total = pastorList().length;
   if (!miss.length) return "";
-  const what = miss.length === total ? `all ${miss.length} Security Names` : `the ${miss.length} Security Name${miss.length === 1 ? "" : "s"} not on this date yet`;
+  const what = miss.length === total ? `all ${miss.length} pastors` : `the ${miss.length} pastor${miss.length === 1 ? "" : "s"} not on this date yet`;
   if (S.tplAsk === k){
     const cat = templateCategory(rows), list = serviceChoices(); if (cat && !list.includes(cat)) list.unshift(cat);
     return `<div class="tpl-ask"><span>Add ${what} to ${esc(fmtShort(k))}?</span>
@@ -1664,7 +1665,7 @@ function adminTemplate(k, rows){
       <button class="btn yes" data-act="tpl-yes" data-date="${k}" ${S.tplBusy ? "disabled" : ""}>${S.tplBusy ? `Adding ${S.tplBusy}…` : "Yes, add them"}</button>
       <button class="btn" data-act="tpl-keep" ${S.tplBusy ? "disabled" : ""}>Cancel</button></div>`;
   }
-  return `<button class="btn tpl-btn" data-act="tpl" data-date="${k}">＋ Add Staff</button>`;
+  return `<button class="btn tpl-btn" data-act="tpl" data-date="${k}">＋ Add Pastors</button>`;
 }
 /* Inline "Delete this position?" check on an Edit Schedule card. */
 function delAsk(i){
@@ -1695,25 +1696,25 @@ function viewAdmin(){
   const cards = rows.map(i => {
     const sid = esc(i.id);
     const locked = lc(i.status) === "accepted" && !(S.adminUnlocked || new Set()).has(i.id);
-    const prof = profileOf(i);
+    const prof = i.fullName ? profileOf(i) : null;
     return `<form class="panel admin-row c2 ${locked ? "locked" : ""}" data-id="${sid}">
-      <div class="c2-main"><span class="c2-face">${avatar(prof || i, "face")}</span>
-        <div class="c2-info"><span class="c2-pos">${esc(i.fullName || "No name")}</span><span class="sub c2-sub">${esc([i.category, fmtShort(i.date)].filter(Boolean).join(" · "))}</span></div>
+      <div class="c2-main"><span class="c2-face">${avatar(prof || { fullName: i.fullName || i.role }, "face")}</span>
+        <div class="c2-info"><span class="c2-pos">${esc(svcFilled(i.role) ? i.role : "No pastor")}</span><span class="sub c2-sub">${esc([i.fullName || "No Armor Bearer yet", i.category, fmtShort(i.date)].filter(Boolean).join(" · "))}</span></div>
         <div class="c2-side">${statusPill(i)}<div class="c2-btns"><button class="iconbtn del-btn" type="button" data-act="del-ask" data-id="${sid}" aria-label="Delete this placement" title="Delete">${ICON.trash}</button>${locked
           ? `<button class="iconbtn notes-btn" type="button" data-act="admin-unlock" data-id="${sid}" aria-label="Edit this placement" title="Edit">${ICON.pencil}</button>`
-          : saveIcon(svcFilled(i.role) && lc(i.status) === "declined")}</div></div>
+          : saveIcon(!!i.fullName && lc(i.status) === "declined")}</div></div>
       </div>${delAsk(i)}
-      <label class="c2-pub"><span>Placement</span><select id="ad-pl-${sid}" data-f="Placement" ${locked ? "disabled" : ""}>${opts(S.placements, i.role, "—")}</select></label>
+      <label class="c2-pub"><span>Armor Bearer</span><select id="ad-pl-${sid}" data-f="FullName" ${locked ? "disabled" : ""}>${opts(rosterPeople().map(p => p.fullName).filter(Boolean), i.fullName, "—")}</select></label>
     </form>`;
   }).join("");
   return `${backBar("Edit Schedule")}
-    <ol class="panel steps"><li>Choose a placement from the drop down menu.</li><li>Hit the <span class="inline-check" aria-label="check">${ICON.check}</span> to send the request. The team member accepts or declines it in the app.</li></ol>
+    <ol class="panel steps"><li>Choose an Armor Bearer for each pastor from the drop down menu.</li><li>Hit the <span class="inline-check" aria-label="check">${ICON.check}</span> to send the request. The team member accepts or declines it in the app.</li></ol>
     <div class="date-chips" role="group" aria-label="Service dates">${chips}${adminPickChip()}</div>
     ${adminPickField()}
     ${adminDayHeader(k, dayRows)}
     ${adminNoService(k, dayRows)}
     ${adminTemplate(k, dayRows)}
-    <p class="sub" style="margin:-4px 0 0">${rows.length} ${rows.length === 1 ? "person" : "people"} scheduled</p>
+    <p class="sub" style="margin:-4px 0 0">${rows.length} ${rows.length === 1 ? "pastor" : "pastors"} scheduled · ${rows.filter(i => i.fullName).length} with an Armor Bearer</p>
     ${rows.length ? `<div class="list">${cards}</div>` : ""}`;
 }
 
@@ -2023,17 +2024,16 @@ document.addEventListener("click", async e => {
       const miss = templateMissing(rows), call = templateCallTime(rows);
       let added = 0;
       try {
-        for (const p of miss){   // one at a time, so the rows keep the Roster's order in SharePoint
+        for (const pastor of miss){   // one at a time, so the rows keep the Assigned To order in SharePoint
           S.tplBusy = `${added + 1} of ${miss.length}`; render();
-          const extra = { SecurityName: p.fullName, Placement: "--", Status: "Pending", ArchiveStatus: "Active" };
-          if (p.personId) extra.NameLookupId = String(p.personId);
+          // No Status yet: the request (Status Pending) goes out once an Armor Bearer is picked and saved.
+          const extra = { Placement: pastor, ArchiveStatus: "Active" };
           if (call) extra.CallTime = call;
           const id = await API.addRow(k, cat, extra);
-          const it = normalize(id, { ...extra, ServiceCategory: cat, email: p.email }); it.date = k; it.archived = false;
-          it.email = p.email; it.personId = p.personId || "";
+          const it = normalize(id, { ...extra, ServiceCategory: cat }); it.date = k; it.archived = false;
           S.items.push(it); added++;
         }
-        S.tplAsk = null; toast(`Added ${added} Security Name${added === 1 ? "" : "s"} to ${fmtShort(k)}`);
+        S.tplAsk = null; toast(`Added ${added} pastor${added === 1 ? "" : "s"} to ${fmtShort(k)}`);
       } catch(err){ toast(`Added ${added} of ${miss.length}. ` + err.message, true); }
       S.tplBusy = null; render(); break;
     }
@@ -2166,20 +2166,23 @@ document.addEventListener("submit", async e => {
   if (e.target.classList.contains("admin-row")){
     if (!isEditor()) return;
     const item = S.items.find(i => i.id === e.target.dataset.id); if (!item) return;
-    const placement = e.target.querySelector('[data-f="Placement"]').value;
+    // Armor Bearers: each row is a pastor (Assigned To); the drop-down picks the Armor Bearer (Full Name + Email).
+    // Like Productions, saving sends them a request (Status Pending); they accept or decline it.
+    const name = e.target.querySelector('[data-f="FullName"]').value;
     const btn = e.target.querySelector('button[type="submit"]');
-    // Like Productions: saving a placement sends a request (Status Pending); the person accepts or declines it.
-    const status = "Pending";
-    if (placement === item.role && lc(item.status) === lc(status)){ btn.disabled = true; return; }
-    const fields = {};
-    if (placement !== item.role) fields.Placement = placement || null;
-    if (lc(item.status) !== lc(status)) fields.Status = status;
+    const person = name ? rosterPeople().find(p => p.fullName === name) : null;
+    const status = name ? "Pending" : "";
+    if (name === (item.fullName || "") && lc(item.status || "") === lc(status)){ btn.disabled = true; return; }
+    const fields = { SecurityName: name || null, Status: status || null };
+    if (person?.personId) fields.NameLookupId = String(person.personId);
+    else if (!name && item.personId) fields.NameLookupId = null;
     btn.disabled = true; btn.classList.add("busy");
     try {
       await API.update(item.id, fields);
-      item.role = placement; item.status = status;
+      item.fullName = name; item.status = status;
+      item.email = person ? person.email : ""; item.personId = person?.personId || "";
       S.adminUnlocked?.delete(item.id);
-      toast(`${svcFilled(placement) ? "Request sent" : "Saved"}: ${item.fullName}, ${placement || "no placement"}, ${fmtShort(item.date)}`); render(); updateBadge();
+      toast(`${name ? "Request sent" : "Cleared"}: ${item.role}${name ? ", " + name : ""}, ${fmtShort(item.date)}`); render(); updateBadge();
     } catch(err){ toast("Couldn't save the change. " + err.message, true); btn.disabled = false; btn.classList.remove("busy"); }
     return;
   }
