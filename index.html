@@ -510,6 +510,33 @@ button.me-btn .av{width:100%;height:100%}
 .pair-av > .av + .av{margin-left:-14px;box-shadow:0 0 0 2px var(--surface)}
 .pair-av > .av:first-child{z-index:1;box-shadow:0 0 0 2px var(--surface)}
 .pair-av .av-empty{color:var(--muted);border:1.5px dashed var(--line);background:transparent}
+/* absences */
+.abs-cal .dcell.sent{background:var(--bad-soft);color:var(--bad);opacity:1}
+.chip.sent{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.cue.abs .when{padding:6px 4px}
+.cue.abs .cue-body{padding:10px 14px;justify-content:center}
+.abs-grid{display:flex;align-items:center;gap:10px}
+.abs-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pill-stack{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin-left:auto}
+.pill-stack .pill{text-align:center}
+.pill-btn{background:transparent;color:var(--bad);border:1px solid var(--bad);font-family:inherit;line-height:inherit;cursor:pointer;padding:1px 8px}
+.abs-confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;color:var(--muted)}
+.day-btns{display:inline-flex;gap:6px;margin-left:auto}
+.abs-day .row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0}
+.abs-day .who{display:flex;align-items:center;gap:8px}
+/* Edit Schedule: Armor Bearer photo beside its label */
+.ab-lab{display:inline-flex;align-items:center;gap:8px}
+.ab-lab .av{width:30px;height:30px;font-size:11px}
+/* You're Serving Today: photo of who you serve */
+.today-who{display:flex;align-items:center;gap:12px}
+.today-who .av{width:56px;height:56px;font-size:18px;box-shadow:0 0 0 2px var(--accent)}
+/* Serving team photo view: pastor on top, Armor Bearer below */
+.tile.pair-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 8px;text-align:center}
+.pair-tile .pt-top,.pair-tile .pt-bot{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%}
+.pair-tile .av{width:62%;height:auto;aspect-ratio:1/1;border-radius:50%;font-size:18px}
+.pair-tile b{font-size:13px;line-height:1.2}
+.pair-tile .pt-sep{width:80%;height:1px;background:var(--line);margin:2px 0}
+.pair-tile .pt-h{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
 .tile .pair-av{width:100%;aspect-ratio:1/1;justify-content:center;padding:10px 6px 0}
 .tile .pair-av > .av{width:58%;height:auto;aspect-ratio:1/1;border-radius:50%;font-size:18px}
 .tile .pair-av > .av + .av{margin-left:-16%}
@@ -676,7 +703,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "6";
+const APP_VERSION = "7";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -749,14 +776,19 @@ const GUEST_TYPES = ["Guest Preacher", "Guest Singer"];
 const isGuestRole = r => GUEST_TYPES.includes(r);
 /* The pastors' Microsoft 365 accounts, so their profile photo shows beside the Armor Bearer serving them. */
 const PASTOR_EMAILS = {
-  "Bishop Younger": "pastor@therampchurch.com",
-  "Pastor Marvin": "pastormarvin@therampchurch.com",
-  "Pastor Westgate": "pastor.westgate@therampchurch.com",
-  "Pastor Claude": "claude@therampchurch.com"
+  "Bishop Younger": ["pastor@therampchurch.com", "pastor@therampchurch.org"],
+  "Pastor Marvin": ["pastormarvin@therampchurch.com"],
+  "Pastor Westgate": ["pastor.westgate@therampchurch.com"],
+  "Pastor Claude": ["claude@therampchurch.com"]
 };
+const pastorEmail = role => (PASTOR_EMAILS[role] || [])[0] || "";
+/* The Assigned To pastor the signed-in person is (or ""). */
+const myPastorRole = () => Object.keys(PASTOR_EMAILS).find(k => PASTOR_EMAILS[k].some(e => (S.me?.emails || []).map(lc).includes(lc(e)))) || "";
+/* The person being served on a row, as an avatar-ready object (pastor photo from Microsoft 365; guests show initials). */
+const servedOf = i => ({ fullName: isGuestRole(i.role) ? (i.guestName || i.role) : i.role, email: pastorEmail(i.role), noProfile: true });
 /* Two overlapping photos: the person being served (pastor/guest) in front-left, the Armor Bearer behind-right. */
 function pairAv(i, size = ""){
-  const served = { fullName: isGuestRole(i.role) ? (i.guestName || i.role) : i.role, email: PASTOR_EMAILS[i.role] || "", noProfile: true };
+  const served = servedOf(i);
   const server = i.fullName ? i : null;
   return `<span class="pair-av ${size}" title="${esc(roleText(i))}${i.fullName ? " · served by " + esc(i.fullName) : ""}">${avatar(served, size)}${server ? avatar(server, size) : `<span class="av ${size} av-empty" aria-hidden="true">?</span>`}</span>`;
 }
@@ -776,7 +808,7 @@ function normalize(id, f, emailById){
     status: f.Status || "",
     guestName: f.GuestName || "",
     instructions: f.Instructions || "",
-    published: "", notes: "", first: "", timeOff: "", serving: [],
+    published: "", notes: f.Notes || "", first: "", timeOff: "", serving: [],
     birthday: f.Birthday ? (/^\d{4}-\d{2}-\d{2}$/.test(f.Birthday) ? f.Birthday : spDate(f.Birthday)) : "",
     phone: f.PhoneNumber || "",
     photoRaw: typeof f.Photo === "string" ? f.Photo : (f.Photo ? JSON.stringify(f.Photo) : ""),
@@ -904,7 +936,7 @@ const LiveAPI = {
       if (!CONFIG[idKey] && CONFIG[nameKey]){ try { CONFIG[idKey] = await listIdOf(CONFIG[nameKey]); } catch(e){ console.warn(`No "${CONFIG[nameKey]}" list on this site.`, e); } }
     }
     // Person column only returns a lookup id; the site's hidden user list maps it to an email.
-    const sel = "Title,ServiceDate,NameLookupId,SecurityName,Placement,Status,ServiceCategory,CallTime,PhoneNumber,Birthday,Photo,ArchiveStatus,GuestName,Instructions";
+    const sel = "Title,ServiceDate,NameLookupId,SecurityName,Placement,Status,ServiceCategory,CallTime,PhoneNumber,Birthday,Photo,ArchiveStatus,GuestName,Instructions,Notes";
     const [userRows, columnData, messages, announcements, rows] = await Promise.all([
       this.all(`${base}/${encodeURIComponent("User Information List")}/items?$expand=fields($select=EMail,UserName,Title)&$top=999`).catch(e => { console.warn("Could not read User Information List; matching by name instead.", e); return []; }),
       this.g(`${base}/${CONFIG.listId}/columns?$select=name,choice`).catch(e => { console.warn("Could not read list columns.", e); return { value: [] }; }),
@@ -1164,7 +1196,24 @@ const filled = v => !!v && v.trim() !== "" && v.trim() !== "--";
 const approved = i => lc(i.status) === "accepted";
 const pending  = i => lc(i.status) === "pending" && filled(i.category) && filled(i.fullName) && filled(i.role);
 const byDate = (a,b) => a.date.localeCompare(b.date) || a.role.localeCompare(b.role);
-const assignments = () => S.items.filter(i => !isProfile(i) && i.date);
+const ABSENT = "Absent";
+const isAbsent = i => lc(i.category || "") === lc(ABSENT);
+const assignments = () => S.items.filter(i => !isProfile(i) && !isAbsent(i) && i.date);
+/* Absences: one "Absent" row per day. Armor Bearers: Full Name + Email. Pastors: Assigned To = the pastor. */
+const absentOn = k => S.items.filter(i => isAbsent(i) && i.date === k);
+const samePerson = (i, p) => !!p && ((!!p.email && i.email === p.email) || (!!i.fullName && !!p.fullName && lc(i.fullName) === lc(p.fullName)));
+const absencesOf = p => !p ? [] : S.items.filter(i => isAbsent(i) && i.date && (p.pastorRole ? i.role === p.pastorRole : (!isPastorAbsence(i) && samePerson(i, p))));
+const isPastorAbsence = i => !!i.role && !!PASTOR_EMAILS[i.role];
+const myAbsences = () => absencesOf(absPersonSelf());
+/* Who the Time Off page is for: an admin's pick, else the signed-in pastor, else my Roster row. */
+function absPersonSelf(){ const pr = myPastorRole(); return pr ? { id: "pastor:" + pr, pastorRole: pr, fullName: pr, email: "" } : myProfile(); }
+function absPerson(){
+  if (isEditor() && S.absFor){
+    if (S.absFor.startsWith("pastor:")){ const pr = S.absFor.slice(7); return { id: S.absFor, pastorRole: pr, fullName: pr, email: "" }; }
+    return S.items.find(i => i.id === S.absFor && isProfile(i)) || absPersonSelf();
+  }
+  return absPersonSelf();
+}
 
 /* ============================================================
    RENDER
@@ -1205,6 +1254,13 @@ function hydratePhotos(){
   });
 }
 
+/* Photo-view tile for a serving pair: the person served on top, a line, then "Armor Bearer" with their photo and name. */
+function pairTile(i, act, id){
+  return `<button class="tile pair-tile" data-act="${act}" data-id="${esc(id)}">
+    <span class="pt-top">${avatar(servedOf(i))}<b>${esc(roleText(i) || "—")}</b></span>
+    <span class="pt-sep" aria-hidden="true"></span>
+    <span class="pt-bot"><span class="pt-h">Armor Bearer</span>${i.fullName ? avatar(i) : `<span class="av av-empty" aria-hidden="true">?</span>`}<b>${esc(i.fullName || "Not assigned")}</b></span></button>`;
+}
 function tile(person, line, act, id){
   return `<button class="tile" data-act="${act}" data-id="${id}">${avatar(person)}<span class="meta"><b>${esc(person.fullName)}</b><small>${esc(line)}</small></span></button>`;
 }
@@ -1345,7 +1401,7 @@ function todayHero(){
   return `<section class="today-hero" aria-label="Where you're serving today">
     <div class="today-h"><span class="today-dot" aria-hidden="true"></span>You're Serving Today</div>
     ${list.map(i => `<div class="today-item">
-      <div class="today-role">${esc(roleOf(i))}</div>
+      <div class="today-who">${avatar(servedOf(i), "face")}<div class="today-role">${esc(roleOf(i))}</div></div>
       <div class="today-meta">${esc(i.category || "")} · Call Time <b>${esc(i.call || "TBD")}</b>${i.svcTime ? ` · Service <b>${esc(i.svcTime)}</b>` : ""}</div>
       ${i.instructions ? `<div class="today-meta guest-notes">${esc(i.instructions).replace(/\n/g, "<br>")}</div>` : ""}
       ${S.confirm === i.id ? `<div class="confirm-row">Can't make it to ${esc(roleOf(i))} today?
@@ -1388,7 +1444,8 @@ function viewHome(){
   const t = todayKey(), wk = addDays(t, 7);
   const todayShown = assignments().some(i => mine(i) && i.date === t && (approved(i) || pending(i)));   // the "You're Serving Today" card
   const pend = assignments().filter(i => mine(i) && pending(i) && i.date >= t).sort(byDate);
-  const up = assignments().filter(i => mine(i) && approved(i) && i.date >= t && i.date <= wk && !(todayShown && i.date === t)).sort(byDate);
+  const up = [...assignments().filter(i => mine(i) && approved(i) && i.date >= t && i.date <= wk && !(todayShown && i.date === t)),
+    ...myAbsences().filter(i => i.date >= t && i.date <= wk)].sort(byDate);
   const first = myProfile()?.first || firstOf(S.me.name);
   // Soonest "Show Until" first; announcements with no end date go last, oldest first.
   const anns = (S.announcements || []).filter(a => a.text && (!a.until || a.until > t))
@@ -1419,7 +1476,7 @@ function viewHome(){
     <section class="fold-sec ${foldClosed("pend") ? "closed" : ""}">${foldHead("pend", "Pending Requests", pend.length, pend.length > 0)}
       ${pend.length ? `<div class="list">${pend.map(i=>cue(i)).join("")}</div>` : `<div class="empty">You have no pending requests right now.</div>`}</section>
     <section class="fold-sec ${foldClosed("next7") ? "closed" : ""}">${foldHead("next7", "Next 7 Days", up.length, newUpCount(up) > 0)}
-      ${up.length ? `<div class="list next7">${up.map(i=>cue(i,{pill:true})).join("")}</div>` : `<div class="empty">You have no confirmed assignments this week.</div>`}</section>`;
+      ${up.length ? `<div class="list next7">${up.map(i => isAbsent(i) ? absentCue(i) : cue(i,{pill:true})).join("")}</div>` : `<div class="empty">You have no confirmed assignments this week.</div>`}</section>`;
 }
 
 function viewSchedule(){
@@ -1453,7 +1510,7 @@ function rosterBlock(list, roleOf){
   // List view: one card per person, laid out like the Productions Edit Schedule cards (photo, name, gold position).
   if (calView() === "list") return `<div class="cal-cards">${list.map(i => { const [a, id] = link(i);
     return `<button type="button" class="panel cal-card" data-act="${a}" data-id="${esc(id)}"><span class="cc-face">${pairAv(i, "face")}</span><span class="cc-info"><b class="cc-name">${esc(i.fullName || "Unassigned")}</b><span class="cc-pos">Serving ${esc(roleText(i) || "—")}</span></span><span class="chev" aria-hidden="true">${ICON.next}</span></button>`; }).join("")}</div>`;
-  return `<div class="roster four cal-roster">${list.map(i => { const [a, id] = link(i); return `<button class="tile" data-act="${a}" data-id="${esc(id)}">${pairAv(i)}<span class="meta"><b>${esc(i.fullName || "Unassigned")}</b><small>${esc(roleText(i))}</small></span></button>`; }).join("")}</div>`;
+  return `<div class="roster four cal-roster">${list.map(i => { const [a, id] = link(i); return pairTile(i, a, id); }).join("")}</div>`;
 }
 function viewCalendar(){
   const m = S.cal.month, sel = S.cal.sel, t = todayKey();
@@ -1479,9 +1536,11 @@ function viewCalendar(){
       <div class="grid7">${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(x=>`<div class="dowh">${x}</div>`).join("")}${cells}</div>
     </section>
     <section><div class="day-h"><h2 class="section-label">${esc(fmtLong(sel))}${cats.length ? ` <span class="day-cat">${esc(cats.join(" / "))}</span>` : ""}</h2>
-        ${isEditor() ? `<button class="iconbtn notes-btn" data-act="admin-open" data-date="${sel}" aria-label="Edit this day's schedule" title="Edit schedule">${ICON.pencil}</button>` : ""}</div>
+        <span class="day-btns">${absPersonSelf() || isEditor() ? `<button class="iconbtn notes-btn" data-act="abs-open" data-date="${sel}" aria-label="Report Time Off for this day" title="Report Time Off">${ICON.away}</button>` : ""}
+        ${isEditor() ? `<button class="iconbtn notes-btn" data-act="admin-open" data-date="${sel}" aria-label="Edit this day's schedule" title="Edit schedule">${ICON.pencil}</button>` : ""}</span></div>
       ${ev.none ? `<div class="no-service"><span aria-hidden="true">❌</span> No Service</div>` : ""}
       ${bdayRows ? `<div class="panel daylist" style="margin-bottom:10px">${bdayRows}</div>` : ""}
+      ${absentOn(sel).length ? `<div class="panel daylist abs-day" style="margin-bottom:10px">${absentOn(sel).map(i => `<div class="row"><div class="who">${avatar(isPastorAbsence(i) ? servedOf(i) : i, "mini")}<b>${esc(isPastorAbsence(i) ? i.role : (i.fullName || "Someone"))}</b></div><span class="pill bad">Absent</span></div>`).join("")}</div>` : ""}
       ${team ? servingHead() + rosterBlock(ev.a) : (bdayRows || ev.none ? "" : `<div class="empty">No events scheduled.</div>`)}
     </section>`;
 }
@@ -1511,7 +1570,7 @@ function viewTeam(){
   const k = S.arg;
   const list = assignments().filter(i => i.date === k && approved(i)).sort(byDate);
   return `${backBar("Serving Team")}<p class="sub" style="margin-top:-12px">${esc(fmtLong(k))}</p>
-    ${list.length ? `<div class="roster">${list.map(i => `<button class="tile" data-act="member-of" data-id="${i.id}">${pairAv(i)}<span class="meta"><b>${esc(i.fullName)}</b><small>Serving ${esc(roleText(i))}</small></span></button>`).join("")}</div>`
+    ${list.length ? `<div class="roster">${list.map(i => pairTile(i, "member-of", i.id)).join("")}</div>`
       : `<div class="empty">No one is confirmed for this date yet.</div>`}`;
 }
 
@@ -1532,43 +1591,73 @@ function noProfileMsg(){
 }
 
 function absState(){
-  if (!S.abs){
-    const p = myProfile(), t = todayKey(), now = new Date();
-    S.abs = { month: new Date(now.getFullYear(), now.getMonth(), 1), sel: new Set(p && p.timeOff && p.timeOff >= t ? [p.timeOff] : []), notes: "", sent: [] };
-  }
+  if (!S.abs){ const now = new Date(); S.abs = { month: new Date(now.getFullYear(), now.getMonth(), 1), sel: new Set(), notes: "", sent: [] }; }
   return S.abs;
 }
+function absWhoField(p){
+  if (!isEditor()) return "";
+  const me = myProfile();
+  const people = S.items.filter(i => isProfile(i) && i.editable && !i.gone && i.fullName).sort((a, b) => a.fullName.localeCompare(b.fullName));
+  const pastors = Object.keys(PASTOR_EMAILS);
+  return `<div class="field abs-who"><label for="abs-for">Absence for</label>
+    <select id="abs-for">${p ? "" : `<option value="" selected disabled>Choose a pastor or Armor Bearer</option>`}
+      <optgroup label="Pastors">${pastors.map(x => `<option value="pastor:${esc(x)}" ${p && p.pastorRole === x ? "selected" : ""}>${esc(x)}</option>`).join("")}</optgroup>
+      <optgroup label="Armor Bearers">${people.map(x => `<option value="${esc(x.id)}" ${p && !p.pastorRole && x.id === p.id ? "selected" : ""}>${esc(x.fullName)}${me && x.id === me.id ? " (you)" : ""}</option>`).join("")}</optgroup></select>
+    <span class="hint">Admins can send time off for any pastor or Armor Bearer.</span></div>`;
+}
 function viewAbsence(){
-  const p = myProfile(), A = absState();
-  if (S.absenceDone) return `<div class="page-h"><h1>Time Off</h1></div>
-    <div class="panel done"><span class="check">${ICON.check}</span><h2 style="font-family:var(--display);font-size:26px;margin:0">Absence Submitted</h2>
+  const p = absPerson(), A = absState(), self = absPersonSelf(), other = !!p && (!self || p.id !== self.id);
+  if (S.absenceDone) return `${backBar("Time Off")}
+    <div class="panel done"><span class="check">${ICON.check}</span><h2 style="font-family:var(--display);font-size:26px;margin:0">Absence Submitted</h2>${A.sentFor ? `<p class="sub" style="margin:0"><b>${esc(A.sentFor)}</b></p>` : ""}
     <p class="sub" style="margin:0">${A.sent.map(k => esc(fmtShort(k))).join(" · ")}</p>
     <p class="sub" style="margin:0">The schedule team will plan around it.</p><button class="btn" data-act="absence-again">Submit More Dates</button></div>`;
-  if (!p) return `<div class="page-h"><h1>Time Off</h1></div>${noProfileMsg()}`;
+  if (!p) return isEditor() ? `${backBar("Time Off")}<div class="panel stack">${absWhoField(null)}</div>` : `${backBar("Time Off")}${noProfileMsg()}`;
   const m = A.month, t = todayKey();
+  const mineAbs = absencesOf(p), already = new Set(mineAbs.map(i => i.date));
+  const upcoming = [...already].filter(k => k >= t).sort();
   const first = new Date(m.getFullYear(), m.getMonth(), 1);
   const dim = new Date(m.getFullYear(), m.getMonth()+1, 0).getDate();
   const weeks = Math.ceil((first.getDay() + dim) / 7);
   const start = keyOf(new Date(m.getFullYear(), m.getMonth(), 1 - first.getDay()));
   let cells = "";
   for (let n = 0; n < weeks*7; n++){
-    const k = addDays(start, n), d = fromKey(k), past = k < t, on = A.sel.has(k);
-    cells += `<button type="button" class="dcell ${d.getMonth()!==m.getMonth()?"out":""} ${k===t?"today":""} ${on?"sel":""}" data-act="abs-pick" data-date="${k}" ${past?"disabled":""} aria-pressed="${on}" aria-label="${esc(fmtLong(k))}"><span>${d.getDate()}</span></button>`;
+    const k = addDays(start, n), d = fromKey(k), past = k < t, on = A.sel.has(k), sent = already.has(k);
+    cells += `<button type="button" class="dcell ${d.getMonth()!==m.getMonth()?"out":""} ${k===t?"today":""} ${on?"sel":""} ${sent?"sent":""}" data-act="abs-pick" data-date="${k}" ${past || sent ?"disabled":""} aria-pressed="${on}" aria-label="${esc(fmtLong(k))}${sent ? ", absence already sent" : ""}"><span>${d.getDate()}</span></button>`;
   }
   const picked = [...A.sel].sort();
   const thisMonth = m.getFullYear() === new Date().getFullYear() && m.getMonth() === new Date().getMonth();
-  return `<div class="page-h"><h1>Time Off</h1></div>
-    <p class="sub" style="margin-top:-10px">Tap every day you can't serve. If your plans change, come back and send more dates.</p>
-    <form class="panel stack" id="absenceForm">
-      <div class="field"><span class="label">Dates of Absence</span>
+  const whose = other ? esc(p.fullName) + "’s" : "your";
+  return `${backBar("Time Off")}
+    <p class="sub" style="margin-top:-10px">${p.pastorRole && !other ? "Tap every day you won't need an Armor Bearer, then submit." : "Tap every day you can't serve, then submit."} To cancel a day already sent, tap it under Already Sent.</p>
+    <form class="panel stack abs-form" id="absenceForm">
+      ${absWhoField(p)}
+      <div class="field abs-cal">
         <div class="cal-head"><h2>${m.toLocaleDateString(undefined,{month:"long",year:"numeric"})}</h2>
           <button type="button" class="iconbtn" data-act="abs-prev" aria-label="Previous month" ${thisMonth?"disabled":""}>${ICON.back}</button>
           <button type="button" class="iconbtn" data-act="abs-next" aria-label="Next month">${ICON.next}</button></div>
         <div class="grid7">${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(x=>`<div class="dowh">${x}</div>`).join("")}${cells}</div>
         <div class="picked">${picked.length ? picked.map(k => `<button type="button" class="chip" data-act="abs-pick" data-date="${k}" aria-label="Remove ${esc(fmtLong(k))}">${esc(fmtShort(k))} <span aria-hidden="true">×</span></button>`).join("") : `<span class="hint">No dates picked yet.</span>`}</div>
       </div>
+      ${upcoming.length ? `<div class="field"><span class="label">Already Sent</span><div class="picked">${upcoming.map(k => { const r = mineAbs.find(i => i.date === k); return `<button type="button" class="chip sent" data-act="abs-cancel" data-id="${esc(r.id)}" aria-label="Cancel time off on ${esc(fmtLong(k))}">${esc(fmtShort(k))} <span aria-hidden="true">×</span></button>`; }).join("")}</div>
+      ${S.absConfirm && mineAbs.some(i => i.id === S.absConfirm) ? (() => { const r = mineAbs.find(i => i.id === S.absConfirm), busy = S.busy.has(r.id); return `<div class="abs-confirm">Cancel ${whose} time off on ${esc(fmtShort(r.date))}?
+        <button type="button" class="btn decline-soft" data-act="abs-cancel-yes" data-id="${esc(r.id)}" ${busy?"disabled":""}>${busy ? "Canceling…" : "Yes, Cancel It"}</button>
+        <button type="button" class="btn" data-act="abs-cancel-keep">Keep It</button></div>`; })() : ""}</div>` : ""}
       <div class="field"><label for="ab-notes">Notes</label><textarea id="ab-notes" placeholder="Anything the schedule team should know (optional).">${esc(A.notes)}</textarea></div>
       <button class="btn blue block" type="submit" id="ab-submit">Submit Absence${picked.length > 1 ? ` (${picked.length} days)` : ""}</button></form>`;
+}
+/* A day off, shown like an assignment card, with Cancel under the TIME OFF pill. */
+function absentCue(i){
+  const d = fromKey(i.date), busy = S.busy.has(i.id);
+  const actions = S.absConfirm === i.id
+    ? `<div class="abs-confirm">Cancel your time off on ${esc(fmtShort(i.date))}?
+        <button class="btn decline-soft" data-act="abs-cancel-yes" data-id="${i.id}" ${busy?"disabled":""}>${busy ? "Canceling…" : "Yes, Cancel It"}</button>
+        <button class="btn" data-act="abs-cancel-keep">Keep It</button></div>` : "";
+  return `<article class="cue abs">
+    <div class="when"><span class="dow">${d.toLocaleDateString(undefined,{weekday:"short"})}</span><span class="day">${d.getDate()}</span><span class="mon">${d.toLocaleDateString(undefined,{month:"short"})}</span></div>
+    <div class="cue-body"><div class="abs-grid">
+        <div class="abs-text"><span class="role">Absent</span><div class="cat">You sent an absence for this day.</div></div>
+        <span class="pill-stack"><span class="pill bad">TIME OFF</span>${S.absConfirm === i.id ? "" : `<button class="pill pill-btn" data-act="abs-cancel" data-id="${i.id}">CANCEL</button>`}</span></div>
+      ${actions}</div></article>`;
 }
 
 const fmtBday = k => k ? fromKey(k).toLocaleDateString(undefined, {month:"long", day:"numeric"}) : "";
@@ -1683,10 +1772,14 @@ function adminNoService(k, rows){
 /* Add Pastors (Armor Bearers): one row per Assigned To pastor (the column's choices) that isn't on the date yet.
    Service Category (and Call Time) are copied from the date's existing rows. The Armor Bearer is picked afterwards. */
 const pastorList = () => (S.placements || []).filter(x => svcFilled(x) && !isGuestRole(x));
+const absentPastors = k => new Set(absentOn(k).filter(isPastorAbsence).map(i => i.role));
+const absentPeople = k => absentOn(k).filter(i => !isPastorAbsence(i));
+const isAbsentOn = (p, k) => absentPeople(k).some(i => samePerson(i, p));
 const rosterPeople = () => S.items.filter(p => isProfile(p) && p.editable && !p.archived && !p.gone).sort((a, b) => Number(a.id) - Number(b.id));
 function templateMissing(rows){
   const have = rows.filter(i => !isNoService(i));
-  return pastorList().filter(x => !have.some(i => i.role === x));
+  const k = rows[0]?.date, off = k ? absentPastors(k) : new Set();
+  return pastorList().filter(x => !have.some(i => i.role === x) && !off.has(x));
 }
 function mostCommon(vals){ const n = {}; vals.forEach(v => { n[v] = (n[v] || 0) + 1; }); return Object.keys(n).sort((a, b) => n[b] - n[a])[0] || ""; }
 const templateCategory = rows => mostCommon(rows.filter(i => !isNoService(i) && svcFilled(i.category) && !NOT_A_SERVICE.includes(i.category)).map(i => i.category));
@@ -1744,20 +1837,21 @@ function viewAdmin(){
   if (!dates.includes(S.adminDate)) dates.push(S.adminDate);
   const k = S.adminDate;
   const dayRows = S.items.filter(i => !isProfile(i) && i.date === k && !i.archived);
-  const rows = dayRows.filter(i => !isNoService(i)).sort((x, y) => Number(x.id) - Number(y.id));   // same order as the SharePoint list
+  const rows = dayRows.filter(i => !isNoService(i) && !isAbsent(i)).sort((x, y) => Number(x.id) - Number(y.id));   // same order as the SharePoint list
+  const offPastors = absentPastors(k), offPeople = absentPeople(k);
   const chips = dates.map(d => { const x = fromKey(d); return `<button class="date-chip ${d === k ? "on" : ""}" data-act="admin-date" data-date="${d}" aria-pressed="${d === k}"><span>${x.toLocaleDateString(undefined,{weekday:"short"})}</span><b>${x.getDate()}</b><span>${x.toLocaleDateString(undefined,{month:"short"})}</span></button>`; }).join("");
   const cards = rows.map(i => {
     const sid = esc(i.id);
     const locked = lc(i.status) === "accepted" && !(S.adminUnlocked || new Set()).has(i.id);
     const prof = i.fullName ? profileOf(i) : null;
     return `<form class="panel admin-row c2 ${locked ? "locked" : ""}" data-id="${sid}">
-      <div class="c2-main"><span class="c2-face">${pairAv(i, "face")}</span>
-        <div class="c2-info"><span class="c2-pos">${esc(svcFilled(i.role) ? roleText(i) : "No pastor")}</span><span class="sub c2-sub">${esc([i.fullName || "No Armor Bearer yet", i.category, fmtShort(i.date)].filter(Boolean).join(" · "))}</span></div>
+      <div class="c2-main"><span class="c2-face">${avatar(servedOf(i), "face")}</span>
+        <div class="c2-info"><span class="c2-pos">${esc(svcFilled(i.role) ? roleText(i) : "No pastor")}</span><span class="sub c2-sub">${esc([i.category, fmtShort(i.date)].filter(Boolean).join(" · "))}</span>${offPastors.has(i.role) ? `<span class="pill bad" style="align-self:flex-start">Absent</span>` : ""}</div>
         <div class="c2-side">${statusPill(i)}<div class="c2-btns"><button class="iconbtn del-btn" type="button" data-act="del-ask" data-id="${sid}" aria-label="Delete this placement" title="Delete">${ICON.trash}</button>${locked
           ? `<button class="iconbtn notes-btn" type="button" data-act="admin-unlock" data-id="${sid}" aria-label="Edit this placement" title="Edit">${ICON.pencil}</button>`
           : saveIcon(!!i.fullName && lc(i.status) === "declined")}</div></div>
       </div>${delAsk(i)}${i.instructions ? `<div class="sub guest-notes">${esc(i.instructions).replace(/\n/g, "<br>")}</div>` : ""}
-      <label class="c2-pub"><span>Armor Bearer</span><select id="ad-pl-${sid}" data-f="FullName" ${locked ? "disabled" : ""}>${opts(rosterPeople().map(p => p.fullName).filter(Boolean), i.fullName, "—")}</select></label>
+      <label class="c2-pub"><span class="ab-lab">${i.fullName ? avatar(i, "mini") : `<span class="av mini av-empty" aria-hidden="true">?</span>`}Armor Bearer</span><select id="ad-pl-${sid}" data-f="FullName" ${locked ? "disabled" : ""}>${opts(rosterPeople().filter(p => !isAbsentOn(p, k) || p.fullName === i.fullName).map(p => p.fullName).filter(Boolean), i.fullName, "—")}</select></label>
     </form>`;
   }).join("");
   return `${backBar("Edit Schedule")}
@@ -1768,7 +1862,10 @@ function viewAdmin(){
     ${adminNoService(k, dayRows)}
     <div class="tpl-pair">${adminTemplate(k, dayRows)}${adminGuest(k, dayRows)}</div>
     <p class="sub" style="margin:-4px 0 0">${rows.length} ${rows.length === 1 ? "pastor" : "pastors"} scheduled · ${rows.filter(i => i.fullName).length} with an Armor Bearer</p>
-    ${rows.length ? `<div class="list">${cards}</div>` : ""}`;
+    ${rows.length ? `<div class="list">${cards}</div>` : ""}
+    ${offPastors.size || offPeople.length ? `<section class="panel daylist abs-day"><h2 class="section-label" style="margin:0 0 6px">Absent</h2>
+      ${[...offPastors].map(r => `<div class="row"><div class="who">${avatar(servedOf({ role: r }), "mini")}<b>${esc(r)}</b></div><span class="pill bad">Absent</span></div>`).join("")}
+      ${offPeople.map(i => `<div class="row"><div class="who">${avatar(i, "mini")}<b>${esc(i.fullName || "Someone")}</b></div><span class="pill bad">Absent</span></div>`).join("")}</section>` : ""}`;
 }
 
 /* ---------- red badge on the app icon for pending requests ---------- */
@@ -1788,15 +1885,16 @@ function recentReplies(){
     if (!byThem) continue;
     out.push({ i, at, kind: st === "accepted" ? "accept" : "decline" });
   }
-  // Genuine Time Off submissions: here absences live on the person's own profile row
-  // (TimeOffDate + Notes), not as separate schedule rows.
+  // Time Off submissions: one Absent row per day; a multi-day request collapses into one entry (same Notes).
+  const seenAbs = new Set();
   for (const i of S.items){
-    if (!isProfile(i)) continue;
+    if (!isAbsent(i) || !i.date) continue;
     const notes = String(i.notes || ""); if (!/Dates of Absence/i.test(notes)) continue;
     const m = S.modById.get(String(i.id)); if (!m || !m.at) continue;
     const at = Date.parse(m.at); if (!(at >= since)) continue;
     if (S.me && S.me.emails && m.by && S.me.emails.some(e => lc(e) === m.by)) continue;
-    out.push({ i, at, kind: "absence" });
+    const key = (i.role || i.fullName) + "|" + notes; if (seenAbs.has(key)) continue; seenAbs.add(key);
+    out.push({ i: isPastorAbsence(i) ? { ...i, fullName: i.role } : i, at, kind: "absence" });
   }
   return out.sort((a, b) => b.at - a.at).slice(0, 12);
 }
@@ -2139,6 +2237,24 @@ document.addEventListener("click", async e => {
     case "flyer-toggle": toggleFlyerCollapsed(b.dataset.flyerId); render(); break;
     case "serve-toggle": b.setAttribute("aria-pressed", b.getAttribute("aria-pressed") === "true" ? "false" : "true"); break;
     case "absence-again": S.absenceDone = false; S.abs = null; render(); break;
+    case "abs-open": {
+      const k = b.dataset.date;
+      S.absFor = null; S.abs = null; S.absConfirm = null; S.absenceDone = false;
+      const A = absState();
+      A.month = new Date(fromKey(k).getFullYear(), fromKey(k).getMonth(), 1);
+      if (k >= todayKey()) A.sel = new Set([k]);
+      go("absence", null); break;
+    }
+    case "abs-cancel": S.absConfirm = b.dataset.id; render(); break;
+    case "abs-cancel-keep": S.absConfirm = null; render(); break;
+    case "abs-cancel-yes": {
+      const it = S.items.find(i => i.id === b.dataset.id);
+      if (!it || !isAbsent(it)) break;
+      S.busy.add(it.id); render();
+      try { await API.deleteItem(it.id); S.items = S.items.filter(i => i.id !== it.id); toast(`Time off canceled: ${fmtShort(it.date)}`); }
+      catch(err){ toast("Couldn't cancel the time off. " + err.message, true); }
+      S.busy.delete(it.id); S.absConfirm = null; render(); break;
+    }
     case "abs-pick": { const A = absState(), k = b.dataset.date; A.sel.has(k) ? A.sel.delete(k) : A.sel.add(k); render(); break; }
     case "abs-prev": { const A = absState(); A.month = new Date(A.month.getFullYear(), A.month.getMonth()-1, 1); render(); break; }
     case "abs-next": { const A = absState(); A.month = new Date(A.month.getFullYear(), A.month.getMonth()+1, 1); render(); break; }
@@ -2206,17 +2322,29 @@ document.addEventListener("submit", async e => {
     } catch(err){ toast("Couldn't change it. " + err.message, true); btn.disabled = false; btn.classList.remove("busy"); render(); }
     return;
   }
-  const p = myProfile();
-  if (e.target.id === "absenceForm" && p){
-    const A = absState(), dates = [...A.sel].sort(), notes = $("#ab-notes").value.trim();
+  if (e.target.id === "absenceForm"){
+    const p = absPerson(); if (!p) return;
+    const self = absPersonSelf(), other = !self || p.id !== self.id;
+    const A = absState(), have = new Set(absencesOf(p).map(i => i.date)), dates = [...A.sel].filter(k => !have.has(k)).sort(), notes = $("#ab-notes").value.trim();
     if (!dates.length){ toast("Tap the days you'll be away on the calendar.", true); return; }
     const btn = $("#ab-submit"); btn.disabled = true; btn.textContent = "Submitting…";
-    // Time Off Date holds the first day; every day (and any note) goes in Notes for the schedule team.
-    const html = `<p><strong>Dates of Absence:</strong> ${dates.map(k => esc(fmtShort(k))).join("; ")}</p>` + (notes ? `<p>${esc(notes).replace(/\n/g,"<br>")}</p>` : "");
+    const html = `<p><strong>Dates of Absence:</strong> ${dates.map(k => esc(fmtShort(k))).join("; ")}</p>` + (notes ? `<p>${esc(notes).replace(/\n/g,"<br>")}</p>` : "") + (other ? `<p><em>Entered by ${esc(S.me.name)}</em></p>` : "");
+    const saved = [];
     try {
-      await API.update(p.id, { TimeOffDate: toSp(dates[0]), Notes: html });
-      p.timeOff = dates[0]; p.notes = html; A.sent = dates; A.notes = ""; S.absenceDone = true; render();
-    } catch(err){ toast("Couldn't submit your absence. " + err.message, true); btn.disabled = false; btn.textContent = "Submit Absence"; }
+      for (const k of dates){
+        const f = { Status: "Unavailable", ArchiveStatus: "Active", SecurityName: p.fullName || null, Notes: html };
+        if (p.pastorRole) f.Placement = p.pastorRole;
+        else if (p.personId) f.NameLookupId = String(p.personId);
+        const id = await API.addRow(k, ABSENT, f);
+        const row = normalize(id, { ...f, ServiceCategory: ABSENT }); Object.assign(row, { date: k, email: p.pastorRole ? "" : (p.email || ""), personId: p.personId || "", archived: false });
+        S.items.push(row); saved.push(k);
+      }
+    } catch(err){
+      toast(`Couldn't submit ${saved.length ? "all of " : ""}the absence. ` + err.message, true);
+      if (!saved.length){ btn.disabled = false; btn.textContent = "Submit Absence"; return; }
+    }
+    A.sent = saved; A.sentFor = other ? p.fullName : ""; A.sel = new Set(); A.notes = ""; S.absenceDone = true; render();
+    return;
   }
   if (e.target.classList.contains("admin-row")){
     if (!isEditor()) return;
@@ -2320,6 +2448,7 @@ document.addEventListener("change", async e => {
     S.annFlyer = S.annFlyer || {}; S.annFlyer.file = f; S.annFlyer.preview = URL.createObjectURL(f); S.annFlyer.remove = false;
     annFlyerRefresh(); return;
   }
+  if (e.target.id === "abs-for"){ S.absFor = e.target.value || null; S.abs = null; S.absConfirm = null; render(); return; }
   if (e.target.id === "admin-pick"){ if (e.target.value){ S.adminExtra = e.target.value; S.adminDate = e.target.value; S.catEdit = null; S.noSvcAsk = null; S.pickOpen = false; render(); } return; }
   const adRow = e.target.closest(".admin-row");
   if (adRow){ adRow.querySelector('button[type="submit"]').disabled = false; return; }
