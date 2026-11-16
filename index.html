@@ -277,6 +277,7 @@ ol.steps li{padding-left:2px}
 .btn.accept{background:var(--go);border-color:var(--go);color:#FFFFFF}
 .btn.decline{background:var(--stop);border-color:var(--stop);color:#FFFFFF}
 .btn.decline-soft{color:var(--bad)}
+.btn.decline-outline{color:var(--bad);border-color:var(--bad)}
 /* Oct 26: tighter Serving Team spacing and compact list cards (text the size of the date, not bold) */
 .day-h:has(+ .team-h){margin-bottom:0 !important}
 .team-h{margin:0 0 6px !important}
@@ -604,6 +605,13 @@ iframe[id^="nl-"],iframe[title="Netlify"],iframe[title*="Netlify"]{display:none!
 .cat-form .iconbtn{width:30px;height:30px;flex:none}
 .cat-form .iconbtn svg{width:15px;height:15px}
 .no-svc-btn{width:100%;justify-content:center;background:transparent;border:2px solid var(--bad);color:var(--bad);font-weight:700}
+.tpl-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tpl-pair > .tpl-ask{grid-column:1/-1}
+.guest-form{flex-direction:column;align-items:stretch}
+.guest-form .field{margin:0}
+.guest-types{display:flex;gap:8px;flex-wrap:wrap}
+.guest-types .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--accent);border-radius:999px;font-weight:600;cursor:pointer}
+.guest-notes{white-space:normal;padding:0 2px;line-height:1.35}
 .tpl-btn{width:100%;justify-content:center;background:transparent;border:2px solid var(--accent);color:var(--accent);font-weight:700}
 .tpl-ask{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:var(--r);padding:10px 14px;font-weight:600}
 .tpl-ask .btn{padding:6px 12px}
@@ -661,7 +669,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "3";
+const APP_VERSION = "4";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -728,6 +736,11 @@ try { const saved = localStorage.getItem("rci-sec-theme"); if (saved) document.d
    Placement, Status, ServiceCategory, CallTime. */
 /* Roster rows (the "Roster" view) have no Service Date, Service Category or Call Time; they hold each
    person's profile: Security Name, Name (email), Phone Number, Birthday, Photo. */
+/* Guests (Armor Bearers): Assigned To = "Guest Preacher" / "Guest Singer", with the guest's name in Guest Name
+   and anything the Armor Bearer should know in Instructions. Pastors are the other Assigned To choices. */
+const GUEST_TYPES = ["Guest Preacher", "Guest Singer"];
+const isGuestRole = r => GUEST_TYPES.includes(r);
+const roleText = i => isGuestRole(i.role) && i.guestName ? `${i.role}: ${i.guestName}` : (i.role || "");
 function normalize(id, f, emailById){
   const roster = !f.ServiceDate && !f.ServiceCategory && !f.CallTime;
   return {
@@ -741,6 +754,8 @@ function normalize(id, f, emailById){
     email: lc(emailById ? emailById[f.NameLookupId] : f.email),
     personId: f.NameLookupId != null ? String(f.NameLookupId) : "",
     status: f.Status || "",
+    guestName: f.GuestName || "",
+    instructions: f.Instructions || "",
     published: "", notes: "", first: "", timeOff: "", serving: [],
     birthday: f.Birthday ? (/^\d{4}-\d{2}-\d{2}$/.test(f.Birthday) ? f.Birthday : spDate(f.Birthday)) : "",
     phone: f.PhoneNumber || "",
@@ -869,7 +884,7 @@ const LiveAPI = {
       if (!CONFIG[idKey] && CONFIG[nameKey]){ try { CONFIG[idKey] = await listIdOf(CONFIG[nameKey]); } catch(e){ console.warn(`No "${CONFIG[nameKey]}" list on this site.`, e); } }
     }
     // Person column only returns a lookup id; the site's hidden user list maps it to an email.
-    const sel = "Title,ServiceDate,NameLookupId,SecurityName,Placement,Status,ServiceCategory,CallTime,PhoneNumber,Birthday,Photo,ArchiveStatus";
+    const sel = "Title,ServiceDate,NameLookupId,SecurityName,Placement,Status,ServiceCategory,CallTime,PhoneNumber,Birthday,Photo,ArchiveStatus,GuestName,Instructions";
     const [userRows, columnData, messages, announcements, rows] = await Promise.all([
       this.all(`${base}/${encodeURIComponent("User Information List")}/items?$expand=fields($select=EMail,UserName,Title)&$top=999`).catch(e => { console.warn("Could not read User Information List; matching by name instead.", e); return []; }),
       this.g(`${base}/${CONFIG.listId}/columns?$select=name,choice`).catch(e => { console.warn("Could not read list columns.", e); return { value: [] }; }),
@@ -1285,14 +1300,15 @@ function cue(i, opts={}){
   } else if (approved(i)){
     actions = `<div class="actions">
       <button class="btn" data-act="team" data-date="${i.date}">Team</button>
-      <button class="btn" data-act="ask-decline" data-id="${i.id}" ${busy?"disabled":""}>Decline</button></div>`;
+      <button class="btn decline-outline" style="margin-left:auto" data-act="ask-decline" data-id="${i.id}" ${busy?"disabled":""}>Can't Make It</button></div>`;
   }
   return `<article class="cue ${isPending?"pending":""}">
     <div class="when"><span class="dow">${d.toLocaleDateString(undefined,{weekday:"short"})}</span><span class="day">${d.getDate()}</span><span class="mon">${d.toLocaleDateString(undefined,{month:"short"})}</span></div>
     <div class="cue-body">
-      <div class="cue-top"><span class="role">${esc(i.role)}</span>${opts.pill ? statusPill(i) : ""}</div>
+      <div class="cue-top"><span class="role">${esc(roleText(i))}</span>${opts.pill ? statusPill(i) : ""}</div>
       <div class="cat">${esc(i.category)}</div>
       <div class="times">${i.call ? `<span>Call Time <b>${esc(i.call)}</b></span>` : ""}${i.svcTime ? `<span>Service Time <b>${esc(i.svcTime)}</b></span>` : ""}</div>
+      ${i.instructions ? `<div class="cat guest-notes">${esc(i.instructions).replace(/\n/g, "<br>")}</div>` : ""}
       ${actions}
     </div></article>`;
 }
@@ -1310,11 +1326,13 @@ function todayHero(){
     <div class="today-h"><span class="today-dot" aria-hidden="true"></span>You're Serving Today</div>
     ${list.map(i => `<div class="today-item">
       <div class="today-role">${esc(roleOf(i))}</div>
-      <div class="today-meta">${esc(i.category || "")}${i.call ? ` · Call Time <b>${esc(i.call)}</b>` : ""}${i.svcTime ? ` · Service <b>${esc(i.svcTime)}</b>` : ""}</div>
-      ${pending(i) ? `<div class="today-act"><span class="pill pending-pill">Needs your reply</span><button class="btn accept" data-act="accept" data-id="${esc(i.id)}" ${S.busy.has(i.id) ? "disabled" : ""}>${S.busy.has(i.id) ? "Saving…" : "Accept"}</button></div>` : ""}
-
-    </div>`).join("")}
-    <div class="today-btns"><button class="btn today-team" data-act="team" data-date="${t}">See Today's Team</button></div></section>`;
+      <div class="today-meta">${esc(i.category || "")} · Call Time <b>${esc(i.call || "TBD")}</b>${i.svcTime ? ` · Service <b>${esc(i.svcTime)}</b>` : ""}</div>
+      ${i.instructions ? `<div class="today-meta guest-notes">${esc(i.instructions).replace(/\n/g, "<br>")}</div>` : ""}
+      ${S.confirm === i.id ? `<div class="confirm-row">Can't make it to ${esc(roleOf(i))} today?
+        <button class="btn decline-soft" data-act="decline" data-id="${esc(i.id)}" ${S.busy.has(i.id) ? "disabled" : ""}>Yes, Decline</button>
+        <button class="btn" data-act="cancel">Keep It</button></div>`
+      : `<div class="today-act">${pending(i) ? `<span class="pill pending-pill">Needs your reply</span><button class="btn accept" data-act="accept" data-id="${esc(i.id)}" ${S.busy.has(i.id) ? "disabled" : ""}>${S.busy.has(i.id) ? "Saving…" : "Accept"}</button>` : ""}<button class="btn decline-outline" style="margin-left:auto" data-act="ask-decline" data-id="${esc(i.id)}" ${S.busy.has(i.id) ? "disabled" : ""}>Can't Make It</button></div>`}
+    </div>`).join("")}</section>`;
 }
 /* Announcements on Home fold up with the chevron beside their count (remembered per phone).
    The count turns red while there's a NEW announcement. Editing always opens the section. */
@@ -1584,8 +1602,8 @@ function personEditor(p){
 function viewProfile(){
   const p = myProfile();
   const head = `<div class="page-h"><h1>My Profile</h1><span style="flex:1"></span><button class="btn" data-act="signout">${ICON.out.replace("<svg",'<svg width="16" height="16"')}Sign Out</button></div>`;
-  if (!p) return `${head}<section class="panel profile-hero">${avatar({fullName:S.me.name, email:S.me.emails[0]}, "lg")}<h2>${esc(S.me.name)}</h2><span class="sub email-addr">${esc(S.me.emails[0] || "")}</span></section>${noProfileMsg()}${adminPanel()}${badgePanel()}${installPanel()}`;
-  return `${head}${personEditor(p)}${adminPanel()}${badgePanel()}${installPanel()}`;
+  if (!p) return `${head}<section class="panel profile-hero">${avatar({fullName:S.me.name, email:S.me.emails[0]}, "lg")}<h2>${esc(S.me.name)}</h2><span class="sub email-addr">${esc(S.me.emails[0] || "")}</span></section>${noProfileMsg()}${adminPanel()}${installPanel()}`;
+  return `${head}${personEditor(p)}${adminPanel()}${installPanel()}`;
 }
 
 /* ================= EDIT SCHEDULE (admins only) =================
@@ -1644,7 +1662,7 @@ function adminNoService(k, rows){
 }
 /* Add Pastors (Armor Bearers): one row per Assigned To pastor (the column's choices) that isn't on the date yet.
    Service Category (and Call Time) are copied from the date's existing rows. The Armor Bearer is picked afterwards. */
-const pastorList = () => (S.placements || []).filter(svcFilled);
+const pastorList = () => (S.placements || []).filter(x => svcFilled(x) && !isGuestRole(x));
 const rosterPeople = () => S.items.filter(p => isProfile(p) && p.editable && !p.archived && !p.gone).sort((a, b) => Number(a.id) - Number(b.id));
 function templateMissing(rows){
   const have = rows.filter(i => !isNoService(i));
@@ -1666,6 +1684,21 @@ function adminTemplate(k, rows){
       <button class="btn" data-act="tpl-keep" ${S.tplBusy ? "disabled" : ""}>Cancel</button></div>`;
   }
   return `<button class="btn tpl-btn" data-act="tpl" data-date="${k}">＋ Add Pastors</button>`;
+}
+/* ＋ Add Guest: a Guest Preacher or Guest Singer with their name and details/instructions for the Armor Bearer. */
+function adminGuest(k, rows){
+  if (rows.some(isNoService)) return "";
+  if (S.guestAsk !== k) return `<button class="btn tpl-btn" data-act="guest" data-date="${k}">＋ Add Guest</button>`;
+  const cat = templateCategory(rows), list = serviceChoices(); if (cat && !list.includes(cat)) list.unshift(cat);
+  const busy = !!S.guestBusy;
+  return `<form class="tpl-ask guest-form" id="guestForm" data-date="${k}">
+    <span>Add a guest to ${esc(fmtShort(k))}</span>
+    <div class="guest-types" role="group" aria-label="Guest type">${GUEST_TYPES.map((g, n) => `<label class="chip"><input type="radio" name="g-type" value="${esc(g)}" ${n === 0 ? "checked" : ""} ${busy ? "disabled" : ""}> ${esc(g)}</label>`).join("")}</div>
+    <div class="field"><label for="g-name">Guest's name</label><input id="g-name" maxlength="120" required placeholder="Type the guest's name" ${busy ? "disabled" : ""}></div>
+    <div class="field"><label for="g-notes">Details / instructions</label><textarea id="g-notes" rows="3" maxlength="2000" placeholder="Arrival time, where to meet them, anything the Armor Bearer should know" ${busy ? "disabled" : ""}></textarea></div>
+    <div class="field tpl-cat"><label for="g-cat">Service Category</label><select id="g-cat" ${busy ? "disabled" : ""}>${cat ? "" : `<option value="" selected disabled>Choose a Service Category</option>`}${list.map(c => `<option ${c === cat ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></div>
+    <button class="btn yes" type="submit" ${busy ? "disabled" : ""}>${busy ? "Adding…" : "Add Guest"}</button>
+    <button class="btn" type="button" data-act="guest-keep" ${busy ? "disabled" : ""}>Cancel</button></form>`;
 }
 /* Inline "Delete this position?" check on an Edit Schedule card. */
 function delAsk(i){
@@ -1699,11 +1732,11 @@ function viewAdmin(){
     const prof = i.fullName ? profileOf(i) : null;
     return `<form class="panel admin-row c2 ${locked ? "locked" : ""}" data-id="${sid}">
       <div class="c2-main"><span class="c2-face">${avatar(prof || { fullName: i.fullName || i.role }, "face")}</span>
-        <div class="c2-info"><span class="c2-pos">${esc(svcFilled(i.role) ? i.role : "No pastor")}</span><span class="sub c2-sub">${esc([i.fullName || "No Armor Bearer yet", i.category, fmtShort(i.date)].filter(Boolean).join(" · "))}</span></div>
+        <div class="c2-info"><span class="c2-pos">${esc(svcFilled(i.role) ? roleText(i) : "No pastor")}</span><span class="sub c2-sub">${esc([i.fullName || "No Armor Bearer yet", i.category, fmtShort(i.date)].filter(Boolean).join(" · "))}</span></div>
         <div class="c2-side">${statusPill(i)}<div class="c2-btns"><button class="iconbtn del-btn" type="button" data-act="del-ask" data-id="${sid}" aria-label="Delete this placement" title="Delete">${ICON.trash}</button>${locked
           ? `<button class="iconbtn notes-btn" type="button" data-act="admin-unlock" data-id="${sid}" aria-label="Edit this placement" title="Edit">${ICON.pencil}</button>`
           : saveIcon(!!i.fullName && lc(i.status) === "declined")}</div></div>
-      </div>${delAsk(i)}
+      </div>${delAsk(i)}${i.instructions ? `<div class="sub guest-notes">${esc(i.instructions).replace(/\n/g, "<br>")}</div>` : ""}
       <label class="c2-pub"><span>Armor Bearer</span><select id="ad-pl-${sid}" data-f="FullName" ${locked ? "disabled" : ""}>${opts(rosterPeople().map(p => p.fullName).filter(Boolean), i.fullName, "—")}</select></label>
     </form>`;
   }).join("");
@@ -1713,7 +1746,7 @@ function viewAdmin(){
     ${adminPickField()}
     ${adminDayHeader(k, dayRows)}
     ${adminNoService(k, dayRows)}
-    ${adminTemplate(k, dayRows)}
+    <div class="tpl-pair">${adminTemplate(k, dayRows)}${adminGuest(k, dayRows)}</div>
     <p class="sub" style="margin:-4px 0 0">${rows.length} ${rows.length === 1 ? "pastor" : "pastors"} scheduled · ${rows.filter(i => i.fullName).length} with an Armor Bearer</p>
     ${rows.length ? `<div class="list">${cards}</div>` : ""}`;
 }
@@ -2014,7 +2047,9 @@ document.addEventListener("click", async e => {
       } catch(err){ toast("Couldn't mark it. " + err.message, true); }
       S.noSvcBusy = false; render(); break;
     }
-    case "tpl": S.tplAsk = b.dataset.date; render(); break;
+    case "tpl": S.tplAsk = b.dataset.date; S.guestAsk = null; render(); break;
+    case "guest": S.guestAsk = b.dataset.date; S.tplAsk = null; render(); $("#g-name")?.focus(); break;
+    case "guest-keep": S.guestAsk = null; render(); break;
     case "tpl-keep": S.tplAsk = null; render(); break;
     case "tpl-yes": {
       if (!isEditor() || S.tplBusy) break;
@@ -2122,7 +2157,7 @@ document.addEventListener("submit", async e => {
       if (!DEMO) await Onboarding.schema();
       const userId = ""; // Link only after the exact directory identity and access are verified.
       const on = [...e.target.querySelectorAll('.serve-opt[aria-pressed="true"]')];
-      const f = newPersonRow({ name, email, userId, birthday: $("#np-bday").value, phone: $("#np-phone").value.trim(), on });
+      const f = newPersonRow({ name, email, userId, birthday: "", phone: $("#np-phone").value.trim(), on });
       if (DEMO){ toast(`Demo: ${name} would be added to the Roster.`); S.addPerson = false; render(); return; }
       f[Onboarding.field] = "Pending";
       const r = await API.g(`/sites/${API.siteId}/lists/${CONFIG.listId}/items`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fields: f }) });
@@ -2185,6 +2220,24 @@ document.addEventListener("submit", async e => {
       toast(`${name ? "Request sent" : "Cleared"}: ${item.role}${name ? ", " + name : ""}, ${fmtShort(item.date)}`); render(); updateBadge();
     } catch(err){ toast("Couldn't save the change. " + err.message, true); btn.disabled = false; btn.classList.remove("busy"); }
     return;
+  }
+  if (e.target.id === "guestForm"){
+    if (!isEditor() || S.guestBusy) return;
+    const k = e.target.dataset.date, type = e.target.querySelector('[name="g-type"]:checked')?.value || GUEST_TYPES[0];
+    const name = $("#g-name").value.trim().replace(/\s+/g, " "), notes = $("#g-notes").value.trim(), cat = ($("#g-cat")?.value || "").trim();
+    if (!name){ toast("Type the guest's name.", true); return; }
+    if (!cat){ toast("Choose a Service Category first.", true); return; }
+    const rows = S.items.filter(i => !isProfile(i) && i.date === k && !i.archived), call = templateCallTime(rows);
+    const extra = { Placement: type, GuestName: name, ArchiveStatus: "Active" };
+    if (notes) extra.Instructions = notes;
+    if (call) extra.CallTime = call;
+    S.guestBusy = true; render();
+    try {
+      const id = await API.addRow(k, cat, extra);
+      const it = normalize(id, { ...extra, ServiceCategory: cat }); it.date = k; it.archived = false;
+      S.items.push(it); S.guestAsk = null; toast(`Added ${type}: ${name}`);
+    } catch(err){ toast("Couldn't add the guest. " + err.message, true); }
+    S.guestBusy = false; render(); return;
   }
   if (e.target.id === "annForm"){
     if (!canEditAnns()) return;
@@ -2326,7 +2379,6 @@ function newPersonForm(){
       <h2 class="section-label" style="margin:0">New Team Member</h2>
       <div class="field"><label for="np-name">Full Name</label><input id="np-name" maxlength="120" autocomplete="off" required placeholder="First and last name"></div>
       <div class="field"><label for="np-email">Email</label><input id="np-email" type="email" maxlength="200" autocomplete="off" required placeholder="The email they sign in with"></div>
-      <div class="field"><label for="np-bday">Birthday</label><input id="np-bday" type="date"></div>
       <div class="field"><label for="np-phone">Phone Number</label><input id="np-phone" type="tel" maxlength="40"></div>
       
       <div class="actions" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn blue" type="submit" id="np-save">Add to Roster</button><button class="btn" type="button" data-act="np-close">Cancel</button></div></form>`;
