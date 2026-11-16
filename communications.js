@@ -104,7 +104,7 @@ const Comm = {
   selected: 'armorbearers', thread: '', mode: 'board', data: {}, meta: {}, drafts: {}, busy: false, edit: null, meId: '', identityKey: '', extraAdmins: {}, showHidden: false, composeOpen: false, generation: 0, moderationReady: true,
   // Verified in SharePoint: author-only reads, member Contribute, designated leader Design.
   privateReady: { armorbearers: true },
-  lists: {"armorbearers": {"board": "", "contacts": ""}},
+  lists: {"armorbearers": {"board": "6330bbe2-dec1-42ab-90b6-a133077319f6", "contacts": "f2d21c8f-89ea-412a-8ef9-10b7f8c860f8"}},
   spaces() { return S.me ? [{key: 'armorbearers', name: 'Armor Bearers', full: 'Armor Bearers', sitePath: CONFIG.sitePath, editors: BASE_EDITORS}] : []; },
   space(key = this.selected) { return this.spaces().find(t => t.key === key); },
   seenKey(key) { return `rci-serve:messages:${DEMO ? 'demo:' : ''}${S.me?.emails?.[0] || ''}:${key}`; },
