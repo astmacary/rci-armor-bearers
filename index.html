@@ -526,6 +526,21 @@ button.me-btn .av{width:100%;height:100%}
 .abs-day .who{display:flex;align-items:center;gap:8px}
 /* Edit Schedule: Armor Bearer photo beside its label */
 .ab-lab{display:inline-flex;align-items:center;gap:8px}
+.c2-notes{align-items:flex-start}
+.c2-notes > span{padding-top:7px}
+.c2-pub textarea,.c2-pub input{flex:1;min-width:0;padding:6px 10px;min-height:34px;font:inherit;font-size:14px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px;resize:vertical}
+.admin-row.c2.locked .c2-pub textarea{opacity:.55}
+.c2-pub > span{min-width:96px}
+.guest-card{border:1.5px solid var(--accent)}
+.guest-btns{display:flex;gap:8px;justify-content:flex-end}
+.cal-card.pair-card{flex-direction:column !important;align-items:stretch !important;gap:6px !important;padding:8px 12px !important}
+.pair-card .pc-row{display:flex;align-items:center;gap:10px}
+.pair-card .pc-row .chev{margin-left:auto}
+.pair-card .pc-info{display:flex;flex-direction:column;gap:1px;min-width:0}
+.pair-card .pc-info b{font-size:14px;font-weight:700}
+.pair-card .pt-h{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.pair-card .pc-sep{height:1px;background:var(--line);margin:0 0 0 2px}
+.pair-card .av{width:38px !important;height:38px !important;font-size:12px !important}
 .ab-lab .av{width:30px;height:30px;font-size:11px}
 /* You're Serving Today: photo of who you serve */
 .today-who{display:flex;align-items:center;gap:12px}
@@ -703,7 +718,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "7";
+const APP_VERSION = "8";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -781,6 +796,15 @@ const PASTOR_EMAILS = {
   "Pastor Westgate": ["pastor.westgate@therampchurch.com"],
   "Pastor Claude": ["claude@therampchurch.com"]
 };
+const PASTOR_TITLES = {
+  "Bishop Younger": "Senior Pastor",
+  "Pastor Marvin": "Executive Pastor",
+  "Pastor Westgate": "Associate Pastor",
+  "Pastor Claude": "Associate Pastor"
+};
+/* Header over the person being served: the pastor's title, or Guest Preacher / Guest Singer. */
+const servedTitle = i => isGuestRole(i.role) ? i.role : (PASTOR_TITLES[i.role] || "");
+const servedName = i => isGuestRole(i.role) ? (i.guestName || i.role) : (i.role || "");
 const pastorEmail = role => (PASTOR_EMAILS[role] || [])[0] || "";
 /* The Assigned To pastor the signed-in person is (or ""). */
 const myPastorRole = () => Object.keys(PASTOR_EMAILS).find(k => PASTOR_EMAILS[k].some(e => (S.me?.emails || []).map(lc).includes(lc(e)))) || "";
@@ -1257,7 +1281,7 @@ function hydratePhotos(){
 /* Photo-view tile for a serving pair: the person served on top, a line, then "Armor Bearer" with their photo and name. */
 function pairTile(i, act, id){
   return `<button class="tile pair-tile" data-act="${act}" data-id="${esc(id)}">
-    <span class="pt-top">${avatar(servedOf(i))}<b>${esc(roleText(i) || "—")}</b></span>
+    <span class="pt-top">${servedTitle(i) ? `<span class="pt-h">${esc(servedTitle(i))}</span>` : ""}${avatar(servedOf(i))}<b>${esc(servedName(i) || "—")}</b></span>
     <span class="pt-sep" aria-hidden="true"></span>
     <span class="pt-bot"><span class="pt-h">Armor Bearer</span>${i.fullName ? avatar(i) : `<span class="av av-empty" aria-hidden="true">?</span>`}<b>${esc(i.fullName || "Not assigned")}</b></span></button>`;
 }
@@ -1509,7 +1533,10 @@ function rosterBlock(list, roleOf){
   const link = i => { const pr = profileOf(i); return pr ? ["member", pr.id] : ["member-of", i.id]; };
   // List view: one card per person, laid out like the Productions Edit Schedule cards (photo, name, gold position).
   if (calView() === "list") return `<div class="cal-cards">${list.map(i => { const [a, id] = link(i);
-    return `<button type="button" class="panel cal-card" data-act="${a}" data-id="${esc(id)}"><span class="cc-face">${pairAv(i, "face")}</span><span class="cc-info"><b class="cc-name">${esc(i.fullName || "Unassigned")}</b><span class="cc-pos">Serving ${esc(roleText(i) || "—")}</span></span><span class="chev" aria-hidden="true">${ICON.next}</span></button>`; }).join("")}</div>`;
+    return `<button type="button" class="panel cal-card pair-card" data-act="${a}" data-id="${esc(id)}">
+      <span class="pc-row">${avatar(servedOf(i), "face")}<span class="pc-info">${servedTitle(i) ? `<span class="pt-h">${esc(servedTitle(i))}</span>` : ""}<b>${esc(servedName(i) || "—")}</b></span></span>
+      <span class="pc-sep" aria-hidden="true"></span>
+      <span class="pc-row">${i.fullName ? avatar(i, "face") : `<span class="av face av-empty" aria-hidden="true">?</span>`}<span class="pc-info"><span class="pt-h">Armor Bearer</span><b>${esc(i.fullName || "Not assigned")}</b></span><span class="chev" aria-hidden="true">${ICON.next}</span></span></button>`; }).join("")}</div>`;
   return `<div class="roster four cal-roster">${list.map(i => { const [a, id] = link(i); return pairTile(i, a, id); }).join("")}</div>`;
 }
 function viewCalendar(){
@@ -1673,6 +1700,7 @@ function viewDirectory(){
     <p class="sub" style="margin-top:-10px">${people.length} team members</p>
     ${people.length ? `<div class="roster four">${people.map(p => starTile(tile(p, "", "member", p.id), p)).join("")}${isEditor() && !S.addPerson ? addTile() : ""}</div>` : isEditor() && !S.addPerson ? `<div class="roster four">${addTile()}</div>` : `<div class="empty">No one is in the Roster yet.</div>`}
     ${waitingPanel()}
+    ${needsEmailPanel()}
     ${archivedSection()}`;
 }
 
@@ -1804,14 +1832,14 @@ function adminGuest(k, rows){
   if (S.guestAsk !== k) return `<button class="btn tpl-btn" data-act="guest" data-date="${k}">＋ Add Guest</button>`;
   const cat = templateCategory(rows), list = serviceChoices(); if (cat && !list.includes(cat)) list.unshift(cat);
   const busy = !!S.guestBusy;
-  return `<form class="tpl-ask guest-form" id="guestForm" data-date="${k}">
-    <span>Add a guest to ${esc(fmtShort(k))}</span>
-    <div class="guest-types" role="group" aria-label="Guest type">${GUEST_TYPES.map((g, n) => `<label class="chip"><input type="radio" name="g-type" value="${esc(g)}" ${n === 0 ? "checked" : ""} ${busy ? "disabled" : ""}> ${esc(g)}</label>`).join("")}</div>
-    <div class="field"><label for="g-name">Guest's name</label><input id="g-name" maxlength="120" required placeholder="Type the guest's name" ${busy ? "disabled" : ""}></div>
-    <div class="field"><label for="g-notes">Details / instructions</label><textarea id="g-notes" rows="3" maxlength="2000" placeholder="Arrival time, where to meet them, anything the Armor Bearer should know" ${busy ? "disabled" : ""}></textarea></div>
-    <div class="field tpl-cat"><label for="g-cat">Service Category</label><select id="g-cat" ${busy ? "disabled" : ""}>${cat ? "" : `<option value="" selected disabled>Choose a Service Category</option>`}${list.map(c => `<option ${c === cat ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></div>
-    <button class="btn yes" type="submit" ${busy ? "disabled" : ""}>${busy ? "Adding…" : "Add Guest"}</button>
-    <button class="btn" type="button" data-act="guest-keep" ${busy ? "disabled" : ""}>Cancel</button></form>`;
+  return `<form class="panel admin-row c2 guest-card" id="guestForm" data-date="${k}">
+    <div class="c2-main"><span class="c2-face"><span class="av face av-empty" aria-hidden="true">＋</span></span>
+      <div class="c2-info"><span class="c2-pos">New Guest</span><span class="sub c2-sub">${esc(fmtShort(k))}</span></div></div>
+    <label class="c2-pub"><span>Guest</span><select id="g-type" ${busy ? "disabled" : ""}>${GUEST_TYPES.map(g => `<option>${esc(g)}</option>`).join("")}</select></label>
+    <label class="c2-pub"><span>Name</span><input id="g-name" maxlength="120" required placeholder="Type the guest's name" ${busy ? "disabled" : ""}></label>
+    <label class="c2-pub"><span>Service</span><select id="g-cat" ${busy ? "disabled" : ""}>${cat ? "" : `<option value="" selected disabled>Choose a Service Category</option>`}${list.map(c => `<option ${c === cat ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></label>
+    <label class="c2-pub c2-notes"><span>Instructions</span><textarea id="g-notes" rows="2" maxlength="2000" placeholder="Details / instructions for the Armor Bearer" ${busy ? "disabled" : ""}></textarea></label>
+    <div class="guest-btns"><button class="btn blue" type="submit" ${busy ? "disabled" : ""}>${busy ? "Adding…" : "Add Guest"}</button><button class="btn" type="button" data-act="guest-keep" ${busy ? "disabled" : ""}>Cancel</button></div></form>`;
 }
 /* Inline "Delete this position?" check on an Edit Schedule card. */
 function delAsk(i){
@@ -1846,12 +1874,13 @@ function viewAdmin(){
     const prof = i.fullName ? profileOf(i) : null;
     return `<form class="panel admin-row c2 ${locked ? "locked" : ""}" data-id="${sid}">
       <div class="c2-main"><span class="c2-face">${avatar(servedOf(i), "face")}</span>
-        <div class="c2-info"><span class="c2-pos">${esc(svcFilled(i.role) ? roleText(i) : "No pastor")}</span><span class="sub c2-sub">${esc([i.category, fmtShort(i.date)].filter(Boolean).join(" · "))}</span>${offPastors.has(i.role) ? `<span class="pill bad" style="align-self:flex-start">Absent</span>` : ""}</div>
+        <div class="c2-info"><span class="c2-pos">${esc(svcFilled(i.role) ? roleText(i) : "No pastor")}</span><span class="sub c2-sub">${esc([isGuestRole(i.role) ? "" : PASTOR_TITLES[i.role], i.category, fmtShort(i.date)].filter(Boolean).join(" · "))}</span>${offPastors.has(i.role) ? `<span class="pill bad" style="align-self:flex-start">Absent</span>` : ""}</div>
         <div class="c2-side">${statusPill(i)}<div class="c2-btns"><button class="iconbtn del-btn" type="button" data-act="del-ask" data-id="${sid}" aria-label="Delete this placement" title="Delete">${ICON.trash}</button>${locked
           ? `<button class="iconbtn notes-btn" type="button" data-act="admin-unlock" data-id="${sid}" aria-label="Edit this placement" title="Edit">${ICON.pencil}</button>`
           : saveIcon(!!i.fullName && lc(i.status) === "declined")}</div></div>
-      </div>${delAsk(i)}${i.instructions ? `<div class="sub guest-notes">${esc(i.instructions).replace(/\n/g, "<br>")}</div>` : ""}
+      </div>${delAsk(i)}
       <label class="c2-pub"><span class="ab-lab">${i.fullName ? avatar(i, "mini") : `<span class="av mini av-empty" aria-hidden="true">?</span>`}Armor Bearer</span><select id="ad-pl-${sid}" data-f="FullName" ${locked ? "disabled" : ""}>${opts(rosterPeople().filter(p => !isAbsentOn(p, k) || p.fullName === i.fullName).map(p => p.fullName).filter(Boolean), i.fullName, "—")}</select></label>
+      <label class="c2-pub c2-notes"><span>Instructions</span><textarea data-f="Instructions" rows="2" maxlength="2000" placeholder="Details / instructions for the Armor Bearer" ${locked ? "disabled" : ""}>${esc(i.instructions || "")}</textarea></label>
     </form>`;
   }).join("");
   return `${backBar("Edit Schedule")}
@@ -2117,6 +2146,7 @@ document.addEventListener("click", async e => {
       S.busy.delete("adm-" + p.id); render(); break;
     }
     case "card-edit": S.cardEdit = b.dataset.id; render(); $("#ce-bday")?.focus(); break;
+    case "need-email": { const id = b.dataset.id; go("member", id); S.cardEdit = id; render(); const f = $("#ce-email"); if (f){ f.scrollIntoView({ block: "center" }); f.focus(); } break; }
     case "card-edit-cancel": S.cardEdit = null; render(); break;
     case "cal-view": S.calView = b.dataset.view; try { localStorage.setItem(calViewKey(), S.calView); } catch(_){} render(); break;
     case "ann-toggle": S.annClosed = !annClosed(); try { localStorage.setItem(ANN_CLOSED_KEY, S.annClosed ? "1" : "0"); } catch(_){} render(); break;
@@ -2346,32 +2376,38 @@ document.addEventListener("submit", async e => {
     A.sent = saved; A.sentFor = other ? p.fullName : ""; A.sel = new Set(); A.notes = ""; S.absenceDone = true; render();
     return;
   }
-  if (e.target.classList.contains("admin-row")){
+  if (e.target.classList.contains("admin-row") && e.target.id !== "guestForm"){
     if (!isEditor()) return;
     const item = S.items.find(i => i.id === e.target.dataset.id); if (!item) return;
     // Armor Bearers: each row is a pastor (Assigned To); the drop-down picks the Armor Bearer (Full Name + Email).
     // Like Productions, saving sends them a request (Status Pending); they accept or decline it.
     const name = e.target.querySelector('[data-f="FullName"]').value;
+    const notes = (e.target.querySelector('[data-f="Instructions"]')?.value || "").trim();
     const btn = e.target.querySelector('button[type="submit"]');
     const person = name ? rosterPeople().find(p => p.fullName === name) : null;
-    const status = name ? "Pending" : "";
-    if (name === (item.fullName || "") && lc(item.status || "") === lc(status)){ btn.disabled = true; return; }
-    const fields = { SecurityName: name || null, Status: status || null };
-    if (person?.personId) fields.NameLookupId = String(person.personId);
-    else if (!name && item.personId) fields.NameLookupId = null;
+    const sameName = name === (item.fullName || "");
+    // A new Armor Bearer (or a declined one picked again) gets a new request; only changing Instructions keeps the status.
+    const status = !name ? "" : (sameName && lc(item.status) !== "declined") ? item.status : "Pending";
+    const notesChanged = notes !== (item.instructions || "");
+    if (sameName && lc(item.status || "") === lc(status) && !notesChanged){ btn.disabled = true; return; }
+    const fields = {};
+    if (!sameName || lc(item.status || "") !== lc(status)){ fields.SecurityName = name || null; fields.Status = status || null;
+      if (person?.personId) fields.NameLookupId = String(person.personId);
+      else if (!name && item.personId) fields.NameLookupId = null; }
+    if (notesChanged) fields.Instructions = notes || null;
     btn.disabled = true; btn.classList.add("busy");
     try {
       await API.update(item.id, fields);
-      item.fullName = name; item.status = status;
-      item.email = person ? person.email : ""; item.personId = person?.personId || "";
+      if ("SecurityName" in fields){ item.fullName = name; item.status = status; item.email = person ? person.email : ""; item.personId = person?.personId || ""; }
+      item.instructions = notes;
       S.adminUnlocked?.delete(item.id);
-      toast(`${name ? "Request sent" : "Cleared"}: ${item.role}${name ? ", " + name : ""}, ${fmtShort(item.date)}`); render(); updateBadge();
+      toast(`${!("SecurityName" in fields) ? "Saved" : name ? "Request sent" : "Cleared"}: ${roleText(item)}${name ? ", " + name : ""}, ${fmtShort(item.date)}`); render(); updateBadge();
     } catch(err){ toast("Couldn't save the change. " + err.message, true); btn.disabled = false; btn.classList.remove("busy"); }
     return;
   }
   if (e.target.id === "guestForm"){
     if (!isEditor() || S.guestBusy) return;
-    const k = e.target.dataset.date, type = e.target.querySelector('[name="g-type"]:checked')?.value || GUEST_TYPES[0];
+    const k = e.target.dataset.date, type = $("#g-type")?.value || GUEST_TYPES[0];
     const name = $("#g-name").value.trim().replace(/\s+/g, " "), notes = $("#g-notes").value.trim(), cat = ($("#g-cat")?.value || "").trim();
     if (!name){ toast("Type the guest's name.", true); return; }
     if (!cat){ toast("Choose a Service Category first.", true); return; }
@@ -2442,6 +2478,7 @@ document.addEventListener("submit", async e => {
 document.addEventListener("input", e => {
   if (e.target.id === "cat-pick"){ const f = e.target.form, v = e.target.value.trim(); f.querySelector(".save-btn").disabled = !v || v === f.dataset.cur; return; } if (e.target.id === "ab-notes") absState().notes = e.target.value; });
 
+document.addEventListener("input", e => { const row = e.target.closest?.(".admin-row"); if (row && e.target.tagName === "TEXTAREA") { const b = row.querySelector('button[type="submit"]'); if (b) b.disabled = false; } });
 document.addEventListener("change", async e => {
   if (e.target.id === "ann-flyer"){
     const f = e.target.files[0]; if (!f) return;
@@ -2451,6 +2488,7 @@ document.addEventListener("change", async e => {
   if (e.target.id === "abs-for"){ S.absFor = e.target.value || null; S.abs = null; S.absConfirm = null; render(); return; }
   if (e.target.id === "admin-pick"){ if (e.target.value){ S.adminExtra = e.target.value; S.adminDate = e.target.value; S.catEdit = null; S.noSvcAsk = null; S.pickOpen = false; render(); } return; }
   const adRow = e.target.closest(".admin-row");
+  if (adRow && e.target.tagName === "TEXTAREA") return;
   if (adRow){ adRow.querySelector('button[type="submit"]').disabled = false; return; }
   if (e.target.id !== "pf-photo" || !e.target.files[0]) return;
   const p = S.items.find(i => i.id === e.target.dataset.id); if (!p || !p.editable) return;
@@ -2574,12 +2612,22 @@ function archivedSection(){
     <p class="sub" style="margin:0 0 8px">Only admins see this. Open someone to restore or delete them.</p>
     <div class="roster four archived-roster">${list.map(t).join("")}</div></details>`;
 }
-/* Admin Home: people added with an email who can't sign in yet (the site hasn't been shared with them). */
+/* Team page (admins): Roster people with no email yet. They can't be invited or shared the app until one is added. */
+function needsEmailPanel(){
+  if (!isEditor()) return "";
+  const list = S.items.filter(p => Onboarding.writable(p) && !p.gone && !Onboarding.email(p) && !p.personId).sort((a,b) => (a.fullName||"").localeCompare(b.fullName||""));
+  if (!list.length) return "";
+  return `<section class="fold-sec ${foldClosed("needemail") ? "closed" : ""}">${foldHead("needemail", "Needs an Email", list.length, true)}
+    <p class="sub" style="margin:0 0 8px">Add the email they sign in with. Saving it sends their invitation and sets up their access.</p>
+    <div class="list">${list.map(p => `<div class="panel wait-row">${avatar(p)}<div class="wait-info"><b>${esc(p.fullName)}</b><span class="sub" style="margin:0">No email yet</span></div>
+      <button class="btn" data-act="need-email" data-id="${esc(p.id)}">Add Email</button></div>`).join("")}</div></section>`;
+}
+/* Team page (admins): people whose Microsoft access is still being set up or failed. */
 function waitingPanel(){
   if (!isEditor()) return "";
   const list = S.items.filter(p => Onboarding.writable(p) && !p.gone && ["Pending", "Failed"].includes(p.accessStatus));
   if (!list.length) return "";
-  return `<section><h2 class="section-label">Access to Check <span class="count hot">${list.length}</span></h2>
+  return `<section class="fold-sec ${foldClosed("access") ? "closed" : ""}">${foldHead("access", "Access to Check", list.length, true)}
     <div class="list">${list.map(p => `<div class="panel wait-row">${avatar(p)}<div class="wait-info"><b>${esc(p.fullName)}</b><span class="sub" style="margin:0">${esc(p.accessStatus || "Pending")}</span></div>
       <button class="btn" data-act="member" data-id="${esc(p.id)}">Open Profile</button></div>`).join("")}</div>
     <p class="sub" style="margin:6px 0 0">Open a profile to check Microsoft access or retry setup. A linked email alone does not confirm access.</p></section>`;
