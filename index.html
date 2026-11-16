@@ -655,7 +655,7 @@ iframe[id^="nl-"],iframe[title="Netlify"],iframe[title*="Netlify"]{display:none!
 .cat-form .iconbtn svg{width:15px;height:15px}
 .no-svc-btn{width:100%;justify-content:center;background:transparent;border:2px solid var(--bad);color:var(--bad);font-weight:700}
 .tpl-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.tpl-pair > .tpl-ask{grid-column:1/-1}
+.tpl-pair > .tpl-ask,.tpl-pair > .guest-card{grid-column:1/-1}
 .guest-form{flex-direction:column;align-items:stretch}
 .guest-form .field{margin:0}
 .guest-types{display:flex;gap:8px;flex-wrap:wrap}
@@ -718,7 +718,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "8";
+const APP_VERSION = "9";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
