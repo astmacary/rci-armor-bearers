@@ -720,7 +720,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "11";
+const APP_VERSION = "12";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -1068,7 +1068,7 @@ const LiveAPI = {
   },
   /* Adds a schedule row for a date (used for "No Service" days). */
   async dateRows(k){
-    const c = this.col.ServiceDate || "Date", nx = new Date(fromKey(k)); nx.setDate(nx.getDate() + 1);
+    const c = "ServiceDate", nx = new Date(fromKey(k)); nx.setDate(nx.getDate() + 1);
     return this.all(`/sites/${this.siteId}/lists/${CONFIG.listId}/items?$filter=fields/${c} ge '${k}T00:00:00Z' and fields/${c} lt '${keyOf(nx)}T00:00:00Z'&$select=id&$top=200`.replace(/ /g, "%20"), { headers: { Prefer: "HonorNonIndexedQueriesWarningMayFailRandomly" } });
   },
   async addRow(k, cat, extra){
