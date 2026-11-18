@@ -170,7 +170,7 @@ a.btn{text-decoration:none}
 .cal-edit .admin-day{flex-direction:column;align-items:flex-start;gap:0;margin:-14px 0 -4px}
 .cal-edit .admin-day .section-label{margin:0}
 section:has(> .cal-edit) > .day-h{margin-bottom:0}
-section:has(> .cal-edit) > .day-h .section-label{margin:0}
+section:has(> .cal-edit) > .day-h .section-label{margin:0;font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:.03em;color:var(--fg)}
 .cal-edit{gap:10px}
 .cal-done{padding:6px 14px;min-height:34px}
 .cal-edit{display:flex;flex-direction:column;gap:12px}
@@ -716,7 +716,7 @@ iframe[id^="nl-"],iframe[title="Netlify"],iframe[title*="Netlify"]{display:none!
 .no-svc-btn{width:100%;justify-content:center;background:transparent;border:2px solid var(--bad);color:var(--bad);font-weight:700}
 .tpl-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .tpl-pair > .tpl-ask,.tpl-pair > .guest-card,.tpl-pair > .no-svc-ask,.tpl-pair > .ns-wrap{grid-column:1/-1}
-.tpl-pair .no-svc-btn,.tpl-pair .tpl-btn{min-height:40px;padding:8px 10px;font-size:14px}
+.tpl-pair .no-svc-btn,.tpl-pair .tpl-btn{min-height:32px;padding:4px 10px;font-size:13px;border-width:1.5px}
 .guest-form{flex-direction:column;align-items:stretch}
 .guest-form .field{margin:0}
 .guest-types{display:flex;gap:8px;flex-wrap:wrap}
@@ -797,7 +797,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "35";
+const APP_VERSION = "36";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -1306,7 +1306,10 @@ const pending  = i => lc(i.status) === "pending" && filled(i.category) && filled
 const byDate = (a,b) => a.date.localeCompare(b.date) || a.role.localeCompare(b.role);
 const ABSENT = "Absent";
 const isAbsent = i => lc(i.category || "") === lc(ABSENT);
-const assignments = () => S.items.filter(i => !isProfile(i) && !isAbsent(i) && i.date);
+/* A pastor marked absent on a date drops off that date: their row is hidden (kept in SharePoint, so it comes back
+   if the absence is removed) from the Calendar roster, serving cards and the edit view. */
+const pastorOffOn = i => !!i.role && S.items.some(a => isAbsent(a) && a.date === i.date && a.role === i.role && isPastorAbsence(a));
+const assignments = () => S.items.filter(i => !isProfile(i) && !isAbsent(i) && i.date && !pastorOffOn(i));
 /* Absences: one "Absent" row per day. Armor Bearers: Full Name + Email. Pastors: Assigned To = the pastor. */
 const absentOn = k => S.items.filter(i => isAbsent(i) && i.date === k);
 const samePerson = (i, p) => !!p && ((!!p.email && i.email === p.email) || (!!i.fullName && !!p.fullName && lc(i.fullName) === lc(p.fullName)));
@@ -2110,7 +2113,7 @@ function viewAdmin(embedK){
   if (!dates.includes(S.adminDate)) dates.push(S.adminDate);
   const k = S.adminDate;
   const dayRows = S.items.filter(i => !isProfile(i) && i.date === k && !i.archived);
-  const rows = dayRows.filter(i => !isNoService(i) && !isAbsent(i)).sort((x, y) => Number(x.id) - Number(y.id));   // same order as the SharePoint list
+  const rows = dayRows.filter(i => !isNoService(i) && !isAbsent(i) && !pastorOffOn(i)).sort((x, y) => Number(x.id) - Number(y.id));   // same order as the SharePoint list
   const offPastors = absentPastors(k), offPeople = absentPeople(k);
   const chips = dates.map(d => { const x = fromKey(d); return `<button class="date-chip ${d === k ? "on" : ""}" data-act="admin-date" data-date="${d}" aria-pressed="${d === k}"><span>${x.toLocaleDateString(undefined,{weekday:"short"})}</span><b>${x.getDate()}</b><span>${x.toLocaleDateString(undefined,{month:"short"})}</span></button>`; }).join("");
   const cards = rows.map(i => {
