@@ -770,7 +770,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "30";
+const APP_VERSION = "31";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -1672,7 +1672,7 @@ function viewCalendar(){
         <button class="iconbtn" data-act="cal-next" aria-label="Next month">${ICON.next}</button></div>
       <div class="grid7">${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(x=>`<div class="dowh">${x}</div>`).join("")}${cells}</div>
     </section>
-    <section><div class="day-h"><h2 class="section-label">${esc(fmtLong(sel))}${cats.length ? ` <span class="day-cat">${esc(cats.join(" / "))}</span>` : ""}</h2>
+    <section><div class="day-h"><h2 class="section-label">${isEditor() && S.calEdit ? "Editing Schedule" : `${esc(fmtLong(sel))}${cats.length ? ` <span class="day-cat">${esc(cats.join(" / "))}</span>` : ""}`}</h2>
         <span class="day-btns">${absPersonSelf() || isEditor() ? `<button class="iconbtn notes-btn" data-act="abs-open" data-date="${sel}" aria-label="Report Time Off for this day" title="Report Time Off">${ICON.away}</button>` : ""}
         ${isEditor() ? (S.calEdit ? `<button class="btn blue cal-done" data-act="cal-edit-done">Done</button>` : `<button class="iconbtn notes-btn" data-act="admin-open" data-date="${sel}" aria-label="Edit this day's schedule" title="Edit schedule">${ICON.pencil}</button>`) : ""}</span></div>
       ${isEditor() && S.calEdit ? `<div class="cal-edit">${viewAdmin(sel)}</div>` : `
