@@ -161,6 +161,8 @@ a.btn{text-decoration:none}
 .c2-title{font-size:15px;font-weight:600;color:var(--fg)}
 .c2-ab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--line)}
 .c2-ab .c2-pub{flex:1 1 220px;padding-top:0;border-top:none}
+.cal-done{padding:6px 14px;min-height:34px}
+.cal-edit{display:flex;flex-direction:column;gap:12px}
 .c2-abside{display:flex;align-items:center;gap:8px;margin-left:auto}
 .c2-face .av.face{width:84px!important;height:84px!important;font-size:25px!important}
 .pill-btn{background:none!important;border:0!important;box-shadow:none!important;outline:0;min-height:0!important;width:auto!important;padding:0;display:inline-flex;align-items:center;gap:3px;cursor:pointer;color:var(--muted)}
@@ -768,7 +770,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "29";
+const APP_VERSION = "30";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -1672,12 +1674,13 @@ function viewCalendar(){
     </section>
     <section><div class="day-h"><h2 class="section-label">${esc(fmtLong(sel))}${cats.length ? ` <span class="day-cat">${esc(cats.join(" / "))}</span>` : ""}</h2>
         <span class="day-btns">${absPersonSelf() || isEditor() ? `<button class="iconbtn notes-btn" data-act="abs-open" data-date="${sel}" aria-label="Report Time Off for this day" title="Report Time Off">${ICON.away}</button>` : ""}
-        ${isEditor() ? `<button class="iconbtn notes-btn" data-act="admin-open" data-date="${sel}" aria-label="Edit this day's schedule" title="Edit schedule">${ICON.pencil}</button>` : ""}</span></div>
+        ${isEditor() ? (S.calEdit ? `<button class="btn blue cal-done" data-act="cal-edit-done">Done</button>` : `<button class="iconbtn notes-btn" data-act="admin-open" data-date="${sel}" aria-label="Edit this day's schedule" title="Edit schedule">${ICON.pencil}</button>`) : ""}</span></div>
+      ${isEditor() && S.calEdit ? `<div class="cal-edit">${viewAdmin(sel)}</div>` : `
       ${ev.none ? `<div class="no-service"><span aria-hidden="true">❌</span> No Service</div>` : ""}
       ${ev.n.length ? `<div class="cal-anns">${ev.n.map(calAnnCard).join("")}</div>` : ""}
       ${bdayRows ? `<div class="panel daylist" style="margin-bottom:10px">${bdayRows}</div>` : ""}
       ${absentOn(sel).length ? `<div class="panel daylist abs-day" style="margin-bottom:10px">${absentOn(sel).map(i => `<div class="row"><div class="who">${avatar(isPastorAbsence(i) ? servedOf(i) : i, "mini")}<b>${esc(isPastorAbsence(i) ? i.role : (i.fullName || "Someone"))}</b></div><span class="pill bad">Absent</span></div>`).join("")}</div>` : ""}
-      ${team ? servingHead() + rosterBlock(ev.a) : (bdayRows || ev.none || ev.n.length ? "" : `<div class="empty">No events scheduled.</div>`)}
+      ${team ? servingHead() + rosterBlock(ev.a) : (bdayRows || ev.none || ev.n.length ? "" : `<div class="empty">No events scheduled.</div>`)}`}
     </section>`;
 }
 
@@ -2068,9 +2071,10 @@ function adminPickField(){
 }
 const adminDateList = base => [...new Set([...base, ...(S.adminExtra ? [S.adminExtra] : [])])].sort();
 
-function viewAdmin(){
-  if (!isEditor()) return `${backBar("Edit Schedule")}<div class="empty">Only schedule admins can edit the schedule.</div>`;
-  const dates = adminDateList(adminDates());
+function viewAdmin(embedK){
+  if (!isEditor()) return embedK ? "" : `${backBar("Edit Schedule")}<div class="empty">Only schedule admins can edit the schedule.</div>`;
+  const dates = embedK ? [embedK] : adminDateList(adminDates());
+  if (embedK) S.adminDate = embedK;
   if (!S.adminDate || !dates.includes(S.adminDate)) S.adminDate = dates.find(d => d >= S.adminDate) || dates[0] || todayKey();
   if (!dates.includes(S.adminDate)) dates.push(S.adminDate);
   const k = S.adminDate;
@@ -2095,10 +2099,10 @@ function viewAdmin(){
       <label class="c2-pub c2-notes"><span>Instructions</span><textarea data-f="Instructions" rows="2" maxlength="2000" placeholder="Details / instructions for the Armor Bearer" ${locked ? "disabled" : ""}>${esc(i.instructions || "")}</textarea></label>
     </form>`;
   }).join("");
-  return `${backBar("Edit Schedule")}
-    <ol class="panel steps"><li>Choose an Armor Bearer for each pastor from the drop down menu.</li><li>Hit the <span class="inline-check" aria-label="check">${ICON.check}</span> to send the request. The team member accepts or declines it in the app.</li></ol>
+  return `${embedK ? "" : backBar("Edit Schedule")}
+    ${embedK ? "" : `<ol class="panel steps"><li>Choose an Armor Bearer for each pastor from the drop down menu.</li><li>Hit the <span class="inline-check" aria-label="check">${ICON.check}</span> to send the request. The team member accepts or declines it in the app.</li></ol>
     <div class="date-chips" role="group" aria-label="Service dates">${chips}${adminPickChip()}</div>
-    ${adminPickField()}
+    ${adminPickField()}`}
     ${adminDayHeader(k, dayRows)}
     ${adminNoService(k, dayRows)}
     <div class="tpl-pair">${adminTemplate(k, dayRows)}${adminGuest(k, dayRows)}</div>
@@ -2247,7 +2251,7 @@ function render(){
     app.innerHTML = header + `<main><div class="wrap">${body}${ServeProfile.link()}</div></main>`;
     return;
   }
-  const views = { messages: () => Comm.view(), admin: viewAdmin, directory: viewDirectory, home: viewHome, schedule: viewSchedule, calendar: viewCalendar, team: viewTeam, member: viewMember, absence: viewAbsence, profile: viewProfile, install: viewInstall };
+  const views = { messages: () => Comm.view(), admin: () => { S.calEdit = true; S.view = "calendar"; return viewCalendar(); }, directory: viewDirectory, home: viewHome, schedule: viewSchedule, calendar: viewCalendar, team: viewTeam, member: viewMember, absence: viewAbsence, profile: viewProfile, install: viewInstall };
   if (!views[S.view]){ S.view = "home"; S.arg = null; }
   saveNav();
   const active = ["team","member","admin"].includes(S.view) ? (S.stack[0]?.view || "home") : S.view;
@@ -2388,7 +2392,13 @@ document.addEventListener("click", async e => {
     case "push-off": try { await Push.disable(); toast("Notifications turned off on this device"); } catch(err){ toast(err.message, true); } break;
     case "wall": go("member", b.dataset.id); requestAnimationFrame(() => { const w = document.getElementById("wall"); if (w) w.scrollIntoView({ block: "start", behavior: "smooth" }); }); break;
     case "msg-ask": S.confirmMsg = b.dataset.id; render(); break;
-    case "admin-open": if (b.dataset.date){ S.adminDate = b.dataset.date; S.adminExtra = b.dataset.date; } S.catEdit = null; S.noSvcAsk = null; S.pickOpen = false; go("admin"); break;
+    case "admin-open": {   // Edit Schedule now lives on the Calendar: admins edit the selected day in place.
+      const d = b.dataset.date || S.cal.sel || adminDates().find(x => x >= todayKey()) || todayKey();
+      S.cal.sel = d; { const x = fromKey(d); S.cal.month = new Date(x.getFullYear(), x.getMonth(), 1); }
+      S.adminDate = d; S.catEdit = null; S.noSvcAsk = null; S.pickOpen = false; S.tplAsk = null; S.delAsk = null; S.calEdit = true;
+      if (S.view !== "calendar") go("calendar"); else render(); break;
+    }
+    case "cal-edit-done": S.calEdit = false; S.statusMenu = null; S.catEdit = null; S.tplAsk = null; S.delAsk = null; S.guestAsk = null; render(); break;
     case "admin-pick-open": {
       S.pickOpen = !S.pickOpen; render();
       const f = $("#admin-pick"); if (f){ f.focus(); try { f.showPicker(); } catch(_){} }
