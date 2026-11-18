@@ -726,6 +726,21 @@ const CONFIG = {
   listId:   "",                    // optional: paste the list's ID to skip the name lookup
   profileCategory: "🎂 Birthday",
   preloadDays: { 0: "Sunday Morning", 3: "Wednesday Night" },
+  // Automatic Service Time and Call Time by Service Category (filled on rows that have none yet).
+  serviceTimes: {
+    "Sunday Morning": { svc: "10:00 AM", call: "9:14 AM" },
+    "Wednesday Night": { svc: "6:30 PM", call: "6:00 PM" },
+    "Monday Night": { svc: "7:00 PM", call: "6:30 PM" },
+    "Tuesday Night": { svc: "7:00 PM", call: "6:30 PM" },
+    "Thursday Night": { svc: "7:00 PM", call: "6:30 PM" },
+    "Friday Night": { svc: "7:00 PM", call: "6:30 PM" },
+  },
+  // Standing pairings: the pastor's row gets this Armor Bearer automatically unless either is absent that day.
+  autoAssign: { "Pastor Marvin": "Darrius Johnson", "Pastor Claude": "Tyron Russell" },
+  // Default Instructions put on each of these pastors' rows (editable per date).
+  defaultInstructions: {
+    "Bishop Younger": "Check with Bishop to see if he needs anything before service.\nPut water and towels out, and make sure the area is clean.\nCheck Bishop’s robe suite, and make sure his office is clean.\nWait for Bishop outside.\nCommunicate with Security about Bishop’s arrival.\nAssist other Pastors (if needed).",
+  },
   preloadWeeks: 8,
   noServiceCategory: "No Service",  // Service Category marking a date with no service
   // Optional lists on the same site, looked up by name. If a list doesn't exist, that card simply stays empty.
@@ -741,7 +756,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "23";
+const APP_VERSION = "24";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -848,7 +863,7 @@ function normalize(id, f, emailById){
     date: f.ServiceDate ? spDate(f.ServiceDate) : "",
     category: roster ? CONFIG.profileCategory : (f.ServiceCategory || ""),
     call: f.CallTime || "",
-    svcTime: "",
+    svcTime: f.ServiceTime || "",
     fullName: f.SecurityName || "",
     email: lc(emailById ? emailById[f.NameLookupId] : f.email),
     personId: f.NameLookupId != null ? String(f.NameLookupId) : "",
@@ -984,7 +999,7 @@ const LiveAPI = {
       if (!CONFIG[idKey] && CONFIG[nameKey]){ try { CONFIG[idKey] = await listIdOf(CONFIG[nameKey]); } catch(e){ console.warn(`No "${CONFIG[nameKey]}" list on this site.`, e); } }
     }
     // Person column only returns a lookup id; the site's hidden user list maps it to an email.
-    const sel = "Title,ServiceDate,NameLookupId,SecurityName,Placement,Status,ServiceCategory,CallTime,PhoneNumber,Birthday,Photo,ArchiveStatus,ActiveStatus,GuestName,Instructions,Notes";
+    const sel = "Title,ServiceDate,NameLookupId,SecurityName,Placement,Status,ServiceCategory,CallTime,ServiceTime,PhoneNumber,Birthday,Photo,ArchiveStatus,ActiveStatus,GuestName,Instructions,Notes";
     const [userRows, columnData, messages, announcements, rows] = await Promise.all([
       this.all(`${base}/${encodeURIComponent("User Information List")}/items?$expand=fields($select=EMail,UserName,Title)&$top=999`).catch(e => { console.warn("Could not read User Information List; matching by name instead.", e); return []; }),
       this.g(`${base}/${CONFIG.listId}/columns?$select=name,choice`).catch(e => { console.warn("Could not read list columns.", e); return { value: [] }; }),
@@ -1909,6 +1924,50 @@ const preloadDates = () => {
   for (let n = 0; n <= CONFIG.preloadWeeks * 7; n++){ const d = new Date(t); d.setDate(t.getDate() + n); if (CONFIG.preloadDays[d.getDay()]) out.push(keyOf(d)); }
   return out;
 };
+const timesFor = cat => { const t = CONFIG.serviceTimes?.[cat]; return t ? { CallTime: t.call, ServiceTime: t.svc } : {}; };
+/* Fills upcoming pastor rows (once per row, recorded in Site Assets app/defaults.json so an admin's later edit or
+   clear is never undone): Service/Call Time by category, the standing Armor Bearer pairings, and Bishop's default
+   Instructions. A row whose category changes gets that category's times if it still had the old defaults. */
+async function applyDefaults(){
+  if (DEMO || !isEditor()) return;
+  const drive = await appAssetsDrive(), path = `/drives/${drive}/root:/app/defaults.json:/content`;
+  let led; try { led = await API.g(path); } catch(e){ if (e.status !== 404) throw e; }
+  led = led && typeof led === "object" ? led : {}; led.times = led.times || {}; led.auto = led.auto || {}; led.instr = led.instr || {};
+  const t = todayKey(); let changed = 0, dirty = false;
+  const rows = S.items.filter(i => !isProfile(i) && i.date && i.date >= t && !i.archived && !isNoService(i) && !isAbsent(i) && svcFilled(i.role) && !isGuestRole(i.role));
+  for (const i of rows){
+    const f = {}, id = String(i.id);
+    // Times
+    const want = CONFIG.serviceTimes?.[i.category], prevCat = led.times[id], prev = prevCat && CONFIG.serviceTimes?.[prevCat];
+    if (want && prevCat !== i.category){
+      if (!i.call || (prev && i.call === prev.call)) f.CallTime = want.call;
+      if (!i.svcTime || (prev && i.svcTime === prev.svc)) f.ServiceTime = want.svc;
+      led.times[id] = i.category; dirty = true;
+    }
+    // Standing pairing
+    const abName = CONFIG.autoAssign?.[i.role];
+    if (abName && !led.auto[id]){
+      const ab = rosterPeople().find(p => lc(p.fullName) === lc(abName));
+      const off = absentPastors(i.date).has(i.role) || (ab && isAbsentOn(ab, i.date)) || (ab && isNonActive(ab));
+      if (ab && !off && !i.fullName){ f.SecurityName = ab.fullName; f.Status = "Pending"; if (ab.personId) f.NameLookupId = String(ab.personId); }
+      if (ab && !off){ led.auto[id] = ab.fullName; dirty = true; }
+    }
+    // Default instructions
+    const ins = CONFIG.defaultInstructions?.[i.role];
+    if (ins && !led.instr[id]){ if (!i.instructions) f.Instructions = ins; led.instr[id] = 1; dirty = true; }
+    if (Object.keys(f).length){
+      await API.update(i.id, f); changed++;
+      if (f.CallTime) i.call = f.CallTime; if (f.ServiceTime) i.svcTime = f.ServiceTime; if (f.Instructions) i.instructions = f.Instructions;
+      if (f.SecurityName){ const ab = rosterPeople().find(p => p.fullName === f.SecurityName); i.fullName = f.SecurityName; i.status = "Pending"; i.email = ab?.email || ""; i.personId = ab?.personId || ""; }
+    }
+  }
+  // Keep the file small: forget rows that are past or gone.
+  const live = new Set(S.items.filter(i => !isProfile(i) && i.date >= t).map(i => String(i.id)));
+  for (const k of ["times", "auto", "instr"]) for (const id of Object.keys(led[k])) if (!live.has(id)){ delete led[k][id]; dirty = true; }
+  if (dirty) await API.g(path, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(led) });
+  if (changed && preloadSafeToRender()){ render(); updateBadge(); }
+  return changed;
+}
 let preloadRunning = false;
 async function preloadSchedule(force){
   if (DEMO || !isEditor() || preloadRunning) return;
@@ -1933,7 +1992,7 @@ async function preloadSchedule(force){
       if (want.length){
         const cat = templateCategory(local) || CONFIG.preloadDays[fromKey(k).getDay()], call = templateCallTime(local);
         for (const pastor of want){
-          const extra = { Placement: pastor, ArchiveStatus: "Active" }; if (call) extra.CallTime = call;
+          const extra = { Placement: pastor, ArchiveStatus: "Active", ...timesFor(cat) }; if (call) extra.CallTime = call;
           const id = await API.addRow(k, cat, extra);
           const it = normalize(id, { ...extra, ServiceCategory: cat }); it.date = k; it.archived = false; S.items.push(it); added++;
         }
@@ -1946,6 +2005,7 @@ async function preloadSchedule(force){
     }
     if (added) toast(`Added ${added} pastor ${added === 1 ? "row" : "rows"} to ${dates} upcoming ${dates === 1 ? "date" : "dates"} (Sundays and Wednesdays).`);
   } catch(e){ console.warn("Sunday/Wednesday preload:", e); if (added) toast(`Added ${added} pastor rows, then stopped: ${e.message}`, true); }
+  try { await applyDefaults(); } catch(e){ console.warn("Schedule defaults:", e); }
   preloadRunning = false;
   if (added && preloadSafeToRender()) render();
 }
@@ -2356,7 +2416,7 @@ document.addEventListener("click", async e => {
         for (const pastor of miss){   // one at a time, so the rows keep the Assigned To order in SharePoint
           S.tplBusy = `${added + 1} of ${miss.length}`; render();
           // No Status yet: the request (Status Pending) goes out once an Armor Bearer is picked and saved.
-          const extra = { Placement: pastor, ArchiveStatus: "Active" };
+          const extra = { Placement: pastor, ArchiveStatus: "Active", ...timesFor(cat) };
           if (call) extra.CallTime = call;
           const id = await API.addRow(k, cat, extra);
           const it = normalize(id, { ...extra, ServiceCategory: cat }); it.date = k; it.archived = false;
