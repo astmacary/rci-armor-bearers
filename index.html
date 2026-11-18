@@ -747,7 +747,7 @@ const CONFIG = {
     "Friday Night": { svc: "7:00 PM", call: "6:30 PM" },
   },
   // Standing pairings: the pastor's row gets this Armor Bearer automatically unless either is absent that day.
-  autoAssign: { "Pastor Marvin": "Darrius Johnson", "Pastor Claude": "Tyron Russell" },
+  autoAssign: { "Pastor Marvin": "Darrius Johnson", "Pastor Claude": "Tyrone Russell" },
   // Default Instructions put on each of these pastors' rows (editable per date).
   defaultInstructions: {
     "Bishop Younger": "Check with Bishop to see if he needs anything before service.\nPut water and towels out, and make sure the area is clean.\nCheck Bishop’s robe suite, and make sure his office is clean.\nWait for Bishop outside.\nCommunicate with Security about Bishop’s arrival.\nAssist other Pastors (if needed).",
@@ -767,7 +767,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "26";
+const APP_VERSION = "27";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -1880,7 +1880,7 @@ function serviceChoices(){
 }
 /* Date heading with the day's Service Category beside it (tap to change it for every row on that date). */
 function adminDayHeader(k, rows){
-  const svc = rows.filter(i => !isNoService(i));
+  const svc = rows.filter(i => !isNoService(i) && !isAbsent(i));
   const cats = [...new Set(svc.filter(i => svcFilled(i.category)).map(i => i.category))];
   let cat = "";
   if (S.catEdit === k && svc.length){
