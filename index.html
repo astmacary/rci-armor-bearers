@@ -178,6 +178,13 @@ section:has(> .cal-edit) > .day-h .section-label{margin:0;font-family:var(--disp
 .st-badge.bad{background:#D93A3A}
 .st-badge.wait{background:#2F7BE0}
 .n7-day{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.info-dot{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--accent);color:var(--accent);font:italic 700 12px/1 Georgia,serif;display:inline-flex;align-items:center;justify-content:center;flex:none;margin-left:auto;cursor:pointer}
+.pair-tile{position:relative}
+.pair-tile .info-dot{position:absolute;right:6px;bottom:6px}
+.ins-pop{max-width:420px;width:calc(100% - 32px);padding:18px;position:relative;text-align:left;cursor:auto}
+.ins-pop h3{margin:0 0 2px}
+.ins-pop ul{margin:10px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+.ins-box{align-items:center;justify-content:center}
 .cal-done{padding:6px 14px;min-height:34px}
 .cal-edit{display:flex;flex-direction:column;gap:12px}
 .c2-abside{display:flex;align-items:center;gap:8px;margin-left:auto}
@@ -812,7 +819,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "42";
+const APP_VERSION = "43";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -1429,11 +1436,22 @@ function hydratePastorPhotos(){
 }
 
 /* Photo-view tile for a serving pair: the person served on top, a line, then "Armor Bearer" with their photo and name. */
+/* "i" on a Calendar card when the Armor Bearer has instructions (or a standing Details checklist) for that service. */
+const insText = i => [i.instructions, CONFIG.roleDetails?.[i.role]].filter(x => x && x.trim()).join("\n");
+const infoDot = i => insText(i) ? `<span class="info-dot" role="button" tabindex="0" data-act="show-ins" data-id="${esc(i.id)}" aria-label="Details and instructions" title="Details / instructions">i</span>` : "";
+function showIns(i){
+  const box = document.createElement("div"); box.className = "lightbox ins-box"; box.setAttribute("role", "dialog"); box.setAttribute("aria-label", "Details and instructions");
+  box.innerHTML = `<div class="panel ins-pop"><button class="lb-close" aria-label="Close">×</button><h3>${esc(servedName(i) || i.role)}</h3><p class="sub">${esc([i.category, fmtShort(i.date), i.fullName ? "Armor Bearer: " + i.fullName : ""].filter(Boolean).join(" · "))}</p><ul>${insText(i).split("\n").filter(x => x.trim()).map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+  const close = () => { box.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = e => { if (e.key === "Escape") close(); };
+  box.addEventListener("click", e => { if (e.target === box || e.target.closest(".lb-close")) close(); }); document.addEventListener("keydown", onKey);
+  document.body.appendChild(box); box.querySelector(".lb-close").focus();
+}
 function pairTile(i, act, id, badge){
   return `<button class="tile pair-tile" data-act="${act}" data-id="${esc(id)}">
     <span class="pt-top">${servedTitle(i) ? `<span class="pt-h">${esc(servedTitle(i))}</span>` : ""}${avatar(servedOf(i))}<b>${esc(servedName(i) || "—")}</b></span>
     <span class="pt-sep" aria-hidden="true"></span>
-    <span class="pt-bot"><span class="pt-h">Armor Bearer</span>${i.fullName ? (badge ? `<span class="st-wrap">${avatar(i)}${stBadge(i)}</span>` : avatar(i)) : `<span class="av av-empty" aria-hidden="true">?</span>`}<b>${esc(i.fullName || "Not assigned")}</b></span></button>`;
+    <span class="pt-bot"><span class="pt-h">Armor Bearer</span>${i.fullName ? (badge ? `<span class="st-wrap">${avatar(i)}${stBadge(i)}</span>` : avatar(i)) : `<span class="av av-empty" aria-hidden="true">?</span>`}<b>${esc(i.fullName || "Not assigned")}</b></span>${infoDot(i)}</button>`;
 }
 function tile(person, line, act, id){
   return `<button class="tile" data-act="${act}" data-id="${id}">${avatar(person)}<span class="meta"><b>${esc(person.fullName)}</b><small>${esc(line)}</small></span></button>`;
@@ -1752,13 +1770,13 @@ function stBadge(i){
 }
 function rosterBlock(list, roleOf, opts={}){
   const ro = roleOf || (i => i.role || "");
-  const link = i => { const pr = profileOf(i); return pr ? ["member", pr.id] : ["member-of", i.id]; };
+  const link = i => { if (!filled(i.fullName)) return ["noop", i.id]; const pr = profileOf(i); return pr ? ["member", pr.id] : ["member-of", i.id]; };
   // List view: one card per person, laid out like the Productions Edit Schedule cards (photo, name, gold position).
   if (opts.list || calView() === "list") return `<div class="cal-cards">${list.map(i => { const [a, id] = link(i);
     return `<button type="button" class="panel cal-card pair-card pc-line" data-act="${a}" data-id="${esc(id)}">
       <span class="pc-row">${avatar(servedOf(i), "face")}<span class="pc-info">${servedTitle(i) ? `<span class="pt-h">${esc(servedTitle(i))}</span>` : ""}<b>${esc(servedName(i) || "—")}</b></span></span>
       <span class="pc-sep" aria-hidden="true"></span>
-      <span class="pc-row">${i.fullName ? (opts.badge ? `<span class="st-wrap">${avatar(i, "face")}${stBadge(i)}</span>` : avatar(i, "face")) : `<span class="av face av-empty" aria-hidden="true">?</span>`}<span class="pc-info"><span class="pt-h">Armor Bearer</span><b>${esc(i.fullName || "Not assigned")}</b></span><span class="chev" aria-hidden="true">${ICON.next}</span></span></button>`; }).join("")}</div>`;
+      <span class="pc-row">${i.fullName ? (opts.badge ? `<span class="st-wrap">${avatar(i, "face")}${stBadge(i)}</span>` : avatar(i, "face")) : `<span class="av face av-empty" aria-hidden="true">?</span>`}<span class="pc-info"><span class="pt-h">Armor Bearer</span><b>${esc(i.fullName || "Not assigned")}</b></span>${infoDot(i) || `<span class="chev" aria-hidden="true">${ICON.next}</span>`}</span></button>`; }).join("")}</div>`;
   return `<div class="roster four cal-roster">${list.map(i => { const [a, id] = link(i); return pairTile(i, a, id, opts.badge); }).join("")}</div>`;
 }
 function viewCalendar(){
@@ -2144,9 +2162,10 @@ function adminTemplate(k, rows){
   const what = miss.length === total ? `all ${miss.length} pastors` : `the ${miss.length} pastor${miss.length === 1 ? "" : "s"} not on this date yet`;
   if (S.tplAsk === k){
     const cat = templateCategory(rows), list = serviceChoices(); if (cat && !list.includes(cat)) list.unshift(cat);
-    return `<div class="tpl-ask"><span>Add ${what} to ${esc(fmtShort(k))}?</span>
+    return `<div class="tpl-ask"><span>Add pastors to ${esc(fmtShort(k))}</span>
+      <div class="field tpl-cat"><label for="tpl-who">Who</label><select id="tpl-who" ${S.tplBusy ? "disabled" : ""}><option value="">${miss.length === total ? `All ${total} pastors` : `All ${miss.length} not on this date yet`}</option>${miss.map(p => `<option>${esc(p)}</option>`).join("")}</select></div>
       <div class="field tpl-cat"><label for="tpl-cat">Service Category</label><select id="tpl-cat" ${S.tplBusy ? "disabled" : ""}>${cat ? "" : `<option value="" selected disabled>Choose a Service Category</option>`}${list.map(c => `<option ${c === cat ? "selected" : ""}>${esc(c)}</option>`).join("")}</select></div>
-      <button class="btn yes" data-act="tpl-yes" data-date="${k}" ${S.tplBusy ? "disabled" : ""}>${S.tplBusy ? `Adding ${S.tplBusy}…` : "Yes, add them"}</button>
+      <button class="btn yes" data-act="tpl-yes" data-date="${k}" ${S.tplBusy ? "disabled" : ""}>${S.tplBusy ? `Adding ${S.tplBusy}…` : "Add"}</button>
       <button class="btn" data-act="tpl-keep" ${S.tplBusy ? "disabled" : ""}>Cancel</button></div>`;
   }
   return `<button class="btn tpl-btn" data-act="tpl" data-date="${k}">＋ Add Pastors</button>`;
@@ -2499,6 +2518,8 @@ document.addEventListener("click", async e => {
       catch(err){ p.active = was; render(); toast("Couldn't save. " + err.message, true); }
       break;
     }
+    case "noop": break;
+    case "show-ins": { const it = S.items.find(x => x.id === b.dataset.id); if (it) showIns(it); break; }
     case "member-of": { const p = profileOf(item); go("member", p ? p.id : null); break; }
     case "pick": S.cal.sel = b.dataset.date; { const d = fromKey(S.cal.sel); if (d.getMonth() !== S.cal.month.getMonth()) S.cal.month = new Date(d.getFullYear(), d.getMonth(), 1); } render(); break;
     case "cal-prev": S.cal.month = new Date(S.cal.month.getFullYear(), S.cal.month.getMonth()-1, 1); render(); break;
@@ -2551,7 +2572,8 @@ document.addEventListener("click", async e => {
       const k = b.dataset.date, cat = ($("#tpl-cat")?.value || "").trim();
       if (!cat){ toast("Choose a Service Category first.", true); break; }
       const rows = S.items.filter(i => !isProfile(i) && i.date === k && !i.archived);
-      const miss = templateMissing(rows), call = templateCallTime(rows);
+      const who = ($("#tpl-who")?.value || "").trim();
+      const miss = templateMissing(rows).filter(p => !who || p === who), call = templateCallTime(rows);
       let added = 0;
       try {
         for (const pastor of miss){   // one at a time, so the rows keep the Assigned To order in SharePoint
