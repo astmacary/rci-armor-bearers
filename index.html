@@ -615,6 +615,8 @@ button.me-btn .av{width:100%;height:100%}
 .tile.pair-tile{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 8px;text-align:center}
 .pair-tile .pt-top,.pair-tile .pt-bot{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%}
 .pair-tile .av{width:62%;height:auto;aspect-ratio:1/1;border-radius:50%;font-size:18px}
+.pair-tile .st-wrap{width:62%}
+.pair-tile .st-wrap .av{width:100%}
 .pair-tile b{font-size:13px;line-height:1.2}
 .pair-tile .pt-sep{width:80%;height:1px;background:var(--line);margin:2px 0}
 .pair-tile .pt-h{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
@@ -810,7 +812,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "39";
+const APP_VERSION = "40";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
