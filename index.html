@@ -187,6 +187,9 @@ section:has(> .cal-edit) > .day-h .section-label{margin:0;font-family:var(--disp
 .ins-box{align-items:center;justify-content:center}
 .oe-fields{flex-basis:100%;display:flex;flex-direction:column;gap:6px}
 .oe-fields input{padding:8px 10px;min-height:38px;font:inherit;font-size:14px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:8px}
+.del-day{color:var(--bad);font-size:13px;align-self:flex-start;margin-top:2px}
+.c2-ins .oe-fields{margin-top:4px}
+.c2-ins.closed .oe-fields{display:none}
 .loc-line{display:block;font-size:13px;color:var(--muted);margin-top:2px}
 .loc-line a{color:var(--accent);text-decoration:underline}
 .cal-done{padding:6px 14px;min-height:34px}
@@ -823,7 +826,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "44";
+const APP_VERSION = "45";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -2026,14 +2029,17 @@ function adminDayHeader(k, rows){
     const cur = cats.length === 1 ? cats[0] : "";
     const list = serviceChoices(); if (cur && !list.includes(cur)) list.unshift(cur);
     cat = `<form class="cat-form field" id="catForm" data-date="${k}" data-cur="${esc(cur)}"><select id="cat-pick" aria-label="Service Category">${cur ? "" : `<option value="" selected disabled>Choose a Service Category</option>`}${list.map(c => `<option ${c === cur ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
-      <div class="oe-fields" ${isOutside(cur) ? "" : "hidden"}><input id="oe-addr" type="text" placeholder="Address" autocomplete="street-address" value="${esc(svc.find(i => i.location)?.location || "")}"><input id="oe-time" type="text" placeholder="Time (e.g. 7:00 PM)" value="${esc(isOutside(cur) ? (svc.find(i => i.svcTime)?.svcTime || "") : "")}"></div>
       <button class="iconbtn notes-btn save-btn" type="submit" disabled aria-label="Save Service Category" title="Save">${ICON.check}</button>
       <button class="linkbtn" type="button" data-act="cat-cancel">Cancel</button></form>`;
   } else if (svc.length){
     cat = `<button class="cat-btn" type="button" data-act="cat-edit" data-date="${k}" title="Change the Service Category">${esc(cats.join(" · ") || "Add Service Category")}${ICON.pencil}</button>`;
   }
-  const oe = S.catEdit === k ? "" : locLine(svc.find(i => isOutside(i.category)) || {});
-  return `<div class="admin-day"><h2 class="section-label">${esc(fmtLong(k))}</h2>${cat}${oe}</div>`;
+  const rowsAll = rows.filter(i => !isAbsent(i)), dAsk = S.delAsk === "day:" + k;
+  const delDay = rowsAll.length ? (dAsk ? `<div class="no-svc-ask del-ask"><span>Delete everything on ${esc(fmtShort(k))}? This removes all ${rowsAll.length} ${rowsAll.length === 1 ? "card" : "cards"} for this date (absences stay).</span>
+      <button class="btn yes" type="button" data-act="del-yes" data-ids="${rowsAll.map(i => esc(i.id)).join(",")}" data-done="${esc(fmtShort(k))} deleted" ${S.delBusy ? "disabled" : ""}>${S.delBusy ? "Deleting…" : "Yes, Delete Date"}</button>
+      <button class="btn" type="button" data-act="del-keep" ${S.delBusy ? "disabled" : ""}>Cancel</button></div>`
+    : `<button class="linkbtn del-day" type="button" data-act="del-ask" data-id="day:${k}">Delete this date</button>`) : "";
+  return `<div class="admin-day"><h2 class="section-label">${esc(fmtLong(k))}</h2>${cat}${delDay}</div>`;
 }
 /* The No Service notice (at the top of the day's roster), or the red button that marks the day. */
 function adminNoService(k, rows){
@@ -2230,7 +2236,7 @@ function viewAdmin(embedK){
     const abSel = `<select id="ad-pl-${sid}" data-f="FullName" aria-label="Armor Bearer for ${esc(roleText(i))}" ${locked ? "disabled" : ""}>${opts(rosterPeople().filter(p => (!isAbsentOn(p, k) && !isNonActive(p) && !(CONFIG.abSkip || []).some(n => lc(n) === lc(p.fullName))) || p.fullName === i.fullName).map(p => p.fullName).filter(Boolean), i.fullName, "—")}</select>`;
     return `<form class="panel admin-row c2 ${locked ? "locked" : ""}" data-id="${sid}">
       <div class="c2-main"><span class="c2-face">${avatar(servedOf(i), "face")}</span>
-        <div class="c2-info"><span class="c2-pos">${esc(svcFilled(i.role) ? roleText(i) : "No pastor")}</span>${!isGuestRole(i.role) && PASTOR_TITLES[i.role] ? `<span class="c2-title">${esc(PASTOR_TITLES[i.role])}</span>` : ""}<span class="sub c2-sub">${esc([i.category, fmtShort(i.date)].filter(Boolean).join(" · "))}</span>${locLine(i)}${offPastors.has(i.role) ? `<span class="pill bad" style="align-self:flex-start">Absent</span>` : ""}</div>
+        <div class="c2-info"><span class="c2-pos">${esc(svcFilled(i.role) ? roleText(i) : "No pastor")}</span>${!isGuestRole(i.role) && PASTOR_TITLES[i.role] ? `<span class="c2-title">${esc(PASTOR_TITLES[i.role])}</span>` : ""}<span class="sub c2-sub">${esc([i.category, fmtShort(i.date)].filter(Boolean).join(" · "))}</span>${offPastors.has(i.role) ? `<span class="pill bad" style="align-self:flex-start">Absent</span>` : ""}</div>
         <div class="c2-btns"><button class="iconbtn del-btn" type="button" data-act="del-ask" data-id="${sid}" aria-label="Delete this placement" title="Delete">${ICON.trash}</button></div>
       </div>${delAsk(i)}
       <div class="c2-ab">
@@ -2243,7 +2249,8 @@ function viewAdmin(embedK){
       </div>
       <div class="c2-ins ${(S.insOpen || new Set()).has(i.id) ? "" : "closed"}"><button type="button" class="c2-lab ins-toggle" data-act="ins-toggle" data-id="${sid}" aria-expanded="${(S.insOpen || new Set()).has(i.id)}">Instructions <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
         ${i.call || i.svcTime ? `<span class="sub c2-times">${i.call ? `Call Time <b>${esc(i.call)}</b>` : ""}${i.call && i.svcTime ? " · " : ""}${i.svcTime ? `Service <b>${esc(i.svcTime)}</b>` : ""}</span>` : ""}
-        <textarea data-f="Instructions" rows="2" maxlength="2000" placeholder="Details / instructions for the Armor Bearer" aria-label="Instructions" ${locked ? "disabled" : ""}>${esc(i.instructions || "")}</textarea></div>
+        <textarea data-f="Instructions" rows="2" maxlength="2000" placeholder="Details / instructions for the Armor Bearer" aria-label="Instructions" ${locked ? "disabled" : ""}>${esc(i.instructions || "")}</textarea>
+        ${isOutside(i.category) ? `<div class="oe-fields"><input data-f="Location" type="text" placeholder="Address" autocomplete="street-address" aria-label="Address" value="${esc(i.location || "")}" ${locked ? "disabled" : ""}><input data-f="ServiceTime" type="text" placeholder="Time (e.g. 7:00 PM)" aria-label="Time" value="${esc(i.svcTime || "")}" ${locked ? "disabled" : ""}></div>` : ""}</div>
     </form>`;
   }).join("");
   return `${embedK ? "" : backBar("Edit Schedule")}
@@ -2734,12 +2741,11 @@ document.addEventListener("submit", async e => {
   if (e.target.id === "catForm"){
     if (!isEditor()) return;
     const k = e.target.dataset.date, v = $("#cat-pick").value.trim().replace(/\s+/g, " "); if (!v) return;
-    const oe = isOutside(v), addr = oe ? ($("#oe-addr")?.value || "").trim() : "", tm = oe ? ($("#oe-time")?.value || "").trim() : "";
-    const list = S.items.filter(i => !isProfile(i) && i.date === k && !isNoService(i) && !isAbsent(i) && (i.category !== v || (oe && (i.location !== addr || i.svcTime !== tm))));
+    const list = S.items.filter(i => !isProfile(i) && i.date === k && !isNoService(i) && !isAbsent(i) && i.category !== v);
     const btn = e.target.querySelector('button[type="submit"]'); btn.disabled = true; btn.classList.add("busy");
     try {
       for (let n = 0; n < list.length; n += 6)   // a few rows at a time
-        await Promise.all(list.slice(n, n + 6).map(async i => { const f = { ServiceCategory: v }; if (oe){ f.Location = addr || null; f.ServiceTime = tm || null; i.location = addr; i.svcTime = tm; } else if (isOutside(i.category)) { f.Location = null; i.location = ""; }
+        await Promise.all(list.slice(n, n + 6).map(async i => { const f = { ServiceCategory: v };
           await API.update(i.id, f); i.category = v; }));
       S.catEdit = null; toast(`${fmtShort(k)}: ${v}`); render();
     } catch(err){ toast("Couldn't change it. " + err.message, true); btn.disabled = false; btn.classList.remove("busy"); render(); }
@@ -2782,17 +2788,21 @@ document.addEventListener("submit", async e => {
     // A new Armor Bearer (or a declined one picked again) gets a new request; only changing Instructions keeps the status.
     const status = !name ? "" : (sameName && lc(item.status) !== "declined") ? item.status : "Pending";
     const notesChanged = notes !== (item.instructions || "");
-    if (sameName && lc(item.status || "") === lc(status) && !notesChanged){ btn.disabled = true; return; }
+    const locEl = e.target.querySelector('[data-f="Location"]'), timeEl = e.target.querySelector('[data-f="ServiceTime"]');
+    const loc = locEl ? locEl.value.trim() : item.location || "", tm = timeEl ? timeEl.value.trim() : item.svcTime || "";
+    const locChanged = loc !== (item.location || "") || tm !== (item.svcTime || "");
+    if (sameName && lc(item.status || "") === lc(status) && !notesChanged && !locChanged){ btn.disabled = true; return; }
     const fields = {};
     if (!sameName || lc(item.status || "") !== lc(status)){ fields.SecurityName = name || null; fields.Status = status || null;
       if (person?.personId) fields.NameLookupId = String(person.personId);
       else if (!name && item.personId) fields.NameLookupId = null; }
     if (notesChanged) fields.Instructions = notes || null;
+    if (locChanged){ fields.Location = loc || null; fields.ServiceTime = tm || null; }
     btn.disabled = true; btn.classList.add("busy");
     try {
       await API.update(item.id, fields);
       if ("SecurityName" in fields){ item.fullName = name; item.status = status; item.email = person ? person.email : ""; item.personId = person?.personId || ""; }
-      item.instructions = notes;
+      item.instructions = notes; if (locChanged){ item.location = loc; item.svcTime = tm; }
       S.adminUnlocked?.delete(item.id);
       toast(`${!("SecurityName" in fields) ? "Saved" : name ? "Request sent" : "Cleared"}: ${roleText(item)}${name ? ", " + name : ""}, ${fmtShort(item.date)}`); render(); updateBadge();
     } catch(err){ toast("Couldn't save the change. " + err.message, true); btn.disabled = false; btn.classList.remove("busy"); }
@@ -2869,9 +2879,9 @@ document.addEventListener("submit", async e => {
 });
 
 document.addEventListener("input", e => {
-  if (e.target.id === "cat-pick" || e.target.id === "oe-addr" || e.target.id === "oe-time"){ const f = e.target.form, v = $("#cat-pick").value.trim(); f.querySelector(".oe-fields").hidden = !isOutside(v); f.querySelector(".save-btn").disabled = !v || (v === f.dataset.cur && !isOutside(v)); return; } if (e.target.id === "ab-notes") absState().notes = e.target.value; });
+  if (e.target.id === "cat-pick"){ const f = e.target.form, v = e.target.value.trim(); f.querySelector(".save-btn").disabled = !v || v === f.dataset.cur; return; } if (e.target.id === "ab-notes") absState().notes = e.target.value; });
 
-document.addEventListener("input", e => { const row = e.target.closest?.(".admin-row"); if (row && e.target.tagName === "TEXTAREA") { const b = row.querySelector('button[type="submit"]'); if (b) b.disabled = false; } });
+document.addEventListener("input", e => { const row = e.target.closest?.(".admin-row"); if (row && (e.target.tagName === "TEXTAREA" || e.target.matches?.('[data-f="Location"],[data-f="ServiceTime"]'))) { const b = row.querySelector('button[type="submit"]'); if (b) b.disabled = false; } });
 document.addEventListener("change", async e => {
   if (e.target.id === "ann-flyer"){
     const f = e.target.files[0]; if (!f) return;
