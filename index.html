@@ -163,7 +163,7 @@ a.btn{text-decoration:none}
 .c2-ab .c2-pub{flex:1 1 220px;padding-top:0;border-top:none}
 .c2-abside{display:flex;align-items:center;gap:8px;margin-left:auto}
 .c2-face .av.face{width:96px!important;height:96px!important;font-size:28px!important}
-.pill-btn{background:none;border:none;padding:0;display:inline-flex;align-items:center;gap:3px;cursor:pointer;color:var(--muted)}
+.pill-btn{background:none!important;border:0!important;box-shadow:none!important;outline:0;min-height:0!important;width:auto!important;padding:0;display:inline-flex;align-items:center;gap:3px;cursor:pointer;color:var(--muted)}
 .pill-caret{font-size:11px}
 .status-menu{flex-basis:100%;display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
 .status-menu .btn{padding:5px 12px;min-height:32px;font-size:13px}
@@ -767,7 +767,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "27";
+const APP_VERSION = "28";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
