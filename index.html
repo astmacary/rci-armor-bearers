@@ -172,6 +172,7 @@ a.btn{text-decoration:none}
 section:has(> .cal-edit) > .day-h{margin-bottom:0}
 section:has(> .cal-edit) > .day-h .section-label{margin:0;font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:.03em;color:var(--fg)}
 .cal-edit{gap:10px}
+.n7-day{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
 .cal-done{padding:6px 14px;min-height:34px}
 .cal-edit{display:flex;flex-direction:column;gap:12px}
 .c2-abside{display:flex;align-items:center;gap:8px;margin-left:auto}
@@ -797,7 +798,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "36";
+const APP_VERSION = "37";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -1609,10 +1610,19 @@ function viewHome(){
         ${ed ? `<button class="btn block" type="button" data-act="ann-change-cancel">Cancel</button>` : ""}</form>`; })() : ""}
       ${CONFIG.guidelinesUrl ? `<p style="margin-top:10px"><a href="${esc(CONFIG.guidelinesUrl)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Read the team guidelines</a></p>` : ""}</div></section>
     ${myWall.length ? `<section><button class="person bday-row" data-act="wall" data-id="${myProfile().id}"><span class="wall-emoji" aria-hidden="true">💌</span><span class="meta"><b>You have ${myWall.length} birthday message${myWall.length > 1 ? "s" : ""}</b><small>Tap to read your Birthday Wall</small></span><span class="chev">${ICON.next}</span></button></section>` : ""}
-    <section class="fold-sec ${foldClosed("pend") ? "closed" : ""}">${foldHead("pend", "Pending Requests", pend.length, pend.length > 0)}
-      ${pend.length ? `<div class="list">${pend.map(i=>cue(i)).join("")}</div>` : `<div class="empty">You have no pending requests right now.</div>`}</section>
-    <section class="fold-sec ${foldClosed("next7") ? "closed" : ""}">${foldHead("next7", "Next 7 Days", up.length, newUpCount(up) > 0)}
-      ${up.length ? `<div class="list next7">${up.map(i => i._bday ? bdayCue(i) : (isAbsent(i) ? absentCue(i) : cue(i,{pill:true}))).join("")}</div>` : `<div class="empty">You have no confirmed assignments this week.</div>`}</section>`;
+    ${isEditor() ? "" : `<section class="fold-sec ${foldClosed("pend") ? "closed" : ""}">${foldHead("pend", "Pending Requests", pend.length, pend.length > 0)}
+      ${pend.length ? `<div class="list">${pend.map(i=>cue(i)).join("")}</div>` : `<div class="empty">You have no pending requests right now.</div>`}</section>`}
+    ${isEditor() ? adminNext7() : `<section class="fold-sec ${foldClosed("next7") ? "closed" : ""}">${foldHead("next7", "Next 7 Days", up.length, newUpCount(up) > 0)}
+      ${up.length ? `<div class="list next7">${up.map(i => i._bday ? bdayCue(i) : (isAbsent(i) ? absentCue(i) : cue(i,{pill:true}))).join("")}</div>` : `<div class="empty">You have no confirmed assignments this week.</div>`}</section>`}`;
+}
+/* Admins' Next 7 Days: the serving team (pastor + Armor Bearer pairs) for each day that has people scheduled. */
+function adminNext7(){
+  const t = todayKey(), days = [];
+  for (let n = 0; n <= 7; n++){ const k = addDays(t, n); const a = assignments().filter(i => i.date === k && !isNoService(i) && svcFilled(i.role)).sort((x, y) => Number(x.id) - Number(y.id)); if (a.length) days.push([k, a]); }
+  return `<section class="fold-sec ${foldClosed("next7") ? "closed" : ""}">${foldHead("next7", "Next 7 Days", days.length, false)}
+    ${days.length ? days.map(([k, a]) => { const cats = [...new Set(a.map(i => i.category).filter(filled))];
+      return `<div class="n7-day"><div class="day-h"><h2 class="section-label" style="margin:0">${esc(fmtLong(k))}${cats.length ? ` <span class="day-cat">${esc(cats.join(" / "))}</span>` : ""}</h2></div>${rosterBlock(a)}</div>`; }).join("")
+      : `<div class="empty">No one is scheduled in the next 7 days.</div>`}</section>`;
 }
 
 function viewSchedule(){
@@ -2134,7 +2144,7 @@ function viewAdmin(embedK){
             ? `<button class="iconbtn notes-btn" type="button" data-act="admin-unlock" data-id="${sid}" aria-label="Edit this placement" title="Edit">${ICON.pencil}</button>`
             : saveIcon(!!i.fullName && lc(i.status) === "declined")}</div></div>
       </div>
-      <div class="c2-ins ${(S.insClosed || new Set()).has(i.id) ? "closed" : ""}"><button type="button" class="c2-lab ins-toggle" data-act="ins-toggle" data-id="${sid}" aria-expanded="${!(S.insClosed || new Set()).has(i.id)}">Instructions <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+      <div class="c2-ins ${(S.insOpen || new Set()).has(i.id) ? "" : "closed"}"><button type="button" class="c2-lab ins-toggle" data-act="ins-toggle" data-id="${sid}" aria-expanded="${(S.insOpen || new Set()).has(i.id)}">Instructions <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
         ${i.call || i.svcTime ? `<span class="sub c2-times">${i.call ? `Call Time <b>${esc(i.call)}</b>` : ""}${i.call && i.svcTime ? " · " : ""}${i.svcTime ? `Service <b>${esc(i.svcTime)}</b>` : ""}</span>` : ""}
         <textarea data-f="Instructions" rows="2" maxlength="2000" placeholder="Details / instructions for the Armor Bearer" aria-label="Instructions" ${locked ? "disabled" : ""}>${esc(i.instructions || "")}</textarea></div>
     </form>`;
@@ -2503,7 +2513,7 @@ document.addEventListener("click", async e => {
       S.delBusy = false; render(); break;
     }
     case "role-details": S.detailsOpen = S.detailsOpen === b.dataset.id ? null : b.dataset.id; render(); break;
-    case "ins-toggle": { S.insClosed = S.insClosed || new Set(); const id = b.dataset.id; S.insClosed.has(id) ? S.insClosed.delete(id) : S.insClosed.add(id); render(); break; }
+    case "ins-toggle": { S.insOpen = S.insOpen || new Set(); const id = b.dataset.id; S.insOpen.has(id) ? S.insOpen.delete(id) : S.insOpen.add(id); render(); break; }
     case "status-menu": S.statusMenu = S.statusMenu === b.dataset.id ? null : b.dataset.id; render(); break;
     case "set-status": {
       const it = S.items.find(i => i.id === b.dataset.id); if (!it || !isEditor()) break;
