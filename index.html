@@ -826,7 +826,7 @@ const CONFIG = {
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "45";
+const APP_VERSION = "46";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -937,6 +937,7 @@ function normalize(id, f, emailById){
     call: f.CallTime || "",
     svcTime: f.ServiceTime || "",
     location: f.Location || "",
+    church: f.ChurchName || "",
     fullName: f.SecurityName || "",
     email: lc(emailById ? emailById[f.NameLookupId] : f.email),
     personId: f.NameLookupId != null ? String(f.NameLookupId) : "",
@@ -1072,7 +1073,7 @@ const LiveAPI = {
       if (!CONFIG[idKey] && CONFIG[nameKey]){ try { CONFIG[idKey] = await listIdOf(CONFIG[nameKey]); } catch(e){ console.warn(`No "${CONFIG[nameKey]}" list on this site.`, e); } }
     }
     // Person column only returns a lookup id; the site's hidden user list maps it to an email.
-    const sel = "Title,ServiceDate,NameLookupId,SecurityName,Placement,Status,ServiceCategory,CallTime,ServiceTime,Location,PhoneNumber,Birthday,Photo,ArchiveStatus,ActiveStatus,GuestName,Instructions,Notes";
+    const sel = "Title,ServiceDate,NameLookupId,SecurityName,Placement,Status,ServiceCategory,CallTime,ServiceTime,Location,ChurchName,PhoneNumber,Birthday,Photo,ArchiveStatus,ActiveStatus,GuestName,Instructions,Notes";
     const [userRows, columnData, messages, announcements, rows] = await Promise.all([
       this.all(`${base}/${encodeURIComponent("User Information List")}/items?$expand=fields($select=EMail,UserName,Title)&$top=999`).catch(e => { console.warn("Could not read User Information List; matching by name instead.", e); return []; }),
       this.g(`${base}/${CONFIG.listId}/columns?$select=name,choice`).catch(e => { console.warn("Could not read list columns.", e); return { value: [] }; }),
@@ -2084,7 +2085,7 @@ const preloadDates = () => {
 };
 const isOutside = c => lc(c || "") === "outside engagement";
 const mapLink = a => `https://maps.apple.com/?q=${encodeURIComponent(a)}`;
-const locLine = i => isOutside(i.category) && (i.location || i.svcTime) ? `<span class="loc-line">📍 ${i.location ? `<a href="${mapLink(i.location)}" target="_blank" rel="noopener">${esc(i.location)}</a>` : "Address TBD"}${i.svcTime ? ` · ${esc(i.svcTime)}` : ""}</span>` : "";
+const locLine = i => isOutside(i.category) && (i.location || i.svcTime || i.church) ? `<span class="loc-line">📍 ${i.church ? `<b>${esc(i.church)}</b> · ` : ""}${i.location ? `<a href="${mapLink(i.location)}" target="_blank" rel="noopener">${esc(i.location)}</a>` : "Address TBD"}${i.svcTime ? ` · ${esc(i.svcTime)}` : ""}</span>` : "";
 const timesFor = cat => { const t = CONFIG.serviceTimes?.[cat]; return t ? { CallTime: t.call, ServiceTime: t.svc } : {}; };
 /* Fills upcoming pastor rows (once per row, recorded in Site Assets app/defaults.json so an admin's later edit or
    clear is never undone): Service/Call Time by category, the standing Armor Bearer pairings, and Bishop's default
@@ -2250,7 +2251,7 @@ function viewAdmin(embedK){
       <div class="c2-ins ${(S.insOpen || new Set()).has(i.id) ? "" : "closed"}"><button type="button" class="c2-lab ins-toggle" data-act="ins-toggle" data-id="${sid}" aria-expanded="${(S.insOpen || new Set()).has(i.id)}">Instructions <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
         ${i.call || i.svcTime ? `<span class="sub c2-times">${i.call ? `Call Time <b>${esc(i.call)}</b>` : ""}${i.call && i.svcTime ? " · " : ""}${i.svcTime ? `Service <b>${esc(i.svcTime)}</b>` : ""}</span>` : ""}
         <textarea data-f="Instructions" rows="2" maxlength="2000" placeholder="Details / instructions for the Armor Bearer" aria-label="Instructions" ${locked ? "disabled" : ""}>${esc(i.instructions || "")}</textarea>
-        ${isOutside(i.category) ? `<div class="oe-fields"><input data-f="Location" type="text" placeholder="Address" autocomplete="street-address" aria-label="Address" value="${esc(i.location || "")}" ${locked ? "disabled" : ""}><input data-f="ServiceTime" type="text" placeholder="Time (e.g. 7:00 PM)" aria-label="Time" value="${esc(i.svcTime || "")}" ${locked ? "disabled" : ""}></div>` : ""}</div>
+        ${isOutside(i.category) ? `<div class="oe-fields"><input data-f="ChurchName" type="text" placeholder="Church name" aria-label="Church name" value="${esc(i.church || "")}" ${locked ? "disabled" : ""}><input data-f="Location" type="text" placeholder="Address" autocomplete="street-address" aria-label="Address" value="${esc(i.location || "")}" ${locked ? "disabled" : ""}><input data-f="ServiceTime" type="text" placeholder="Time (e.g. 7:00 PM)" aria-label="Time" value="${esc(i.svcTime || "")}" ${locked ? "disabled" : ""}></div>` : ""}</div>
     </form>`;
   }).join("");
   return `${embedK ? "" : backBar("Edit Schedule")}
@@ -2789,20 +2790,21 @@ document.addEventListener("submit", async e => {
     const status = !name ? "" : (sameName && lc(item.status) !== "declined") ? item.status : "Pending";
     const notesChanged = notes !== (item.instructions || "");
     const locEl = e.target.querySelector('[data-f="Location"]'), timeEl = e.target.querySelector('[data-f="ServiceTime"]');
+    const chEl = e.target.querySelector('[data-f="ChurchName"]'), ch = chEl ? chEl.value.trim() : item.church || "";
     const loc = locEl ? locEl.value.trim() : item.location || "", tm = timeEl ? timeEl.value.trim() : item.svcTime || "";
-    const locChanged = loc !== (item.location || "") || tm !== (item.svcTime || "");
+    const locChanged = loc !== (item.location || "") || tm !== (item.svcTime || "") || ch !== (item.church || "");
     if (sameName && lc(item.status || "") === lc(status) && !notesChanged && !locChanged){ btn.disabled = true; return; }
     const fields = {};
     if (!sameName || lc(item.status || "") !== lc(status)){ fields.SecurityName = name || null; fields.Status = status || null;
       if (person?.personId) fields.NameLookupId = String(person.personId);
       else if (!name && item.personId) fields.NameLookupId = null; }
     if (notesChanged) fields.Instructions = notes || null;
-    if (locChanged){ fields.Location = loc || null; fields.ServiceTime = tm || null; }
+    if (locChanged){ fields.ChurchName = ch || null; fields.Location = loc || null; fields.ServiceTime = tm || null; }
     btn.disabled = true; btn.classList.add("busy");
     try {
       await API.update(item.id, fields);
       if ("SecurityName" in fields){ item.fullName = name; item.status = status; item.email = person ? person.email : ""; item.personId = person?.personId || ""; }
-      item.instructions = notes; if (locChanged){ item.location = loc; item.svcTime = tm; }
+      item.instructions = notes; if (locChanged){ item.church = ch; item.location = loc; item.svcTime = tm; }
       S.adminUnlocked?.delete(item.id);
       toast(`${!("SecurityName" in fields) ? "Saved" : name ? "Request sent" : "Cleared"}: ${roleText(item)}${name ? ", " + name : ""}, ${fmtShort(item.date)}`); render(); updateBadge();
     } catch(err){ toast("Couldn't save the change. " + err.message, true); btn.disabled = false; btn.classList.remove("busy"); }
@@ -2881,7 +2883,7 @@ document.addEventListener("submit", async e => {
 document.addEventListener("input", e => {
   if (e.target.id === "cat-pick"){ const f = e.target.form, v = e.target.value.trim(); f.querySelector(".save-btn").disabled = !v || v === f.dataset.cur; return; } if (e.target.id === "ab-notes") absState().notes = e.target.value; });
 
-document.addEventListener("input", e => { const row = e.target.closest?.(".admin-row"); if (row && (e.target.tagName === "TEXTAREA" || e.target.matches?.('[data-f="Location"],[data-f="ServiceTime"]'))) { const b = row.querySelector('button[type="submit"]'); if (b) b.disabled = false; } });
+document.addEventListener("input", e => { const row = e.target.closest?.(".admin-row"); if (row && (e.target.tagName === "TEXTAREA" || e.target.matches?.('[data-f="ChurchName"],[data-f="Location"],[data-f="ServiceTime"]'))) { const b = row.querySelector('button[type="submit"]'); if (b) b.disabled = false; } });
 document.addEventListener("change", async e => {
   if (e.target.id === "ann-flyer"){
     const f = e.target.files[0]; if (!f) return;
