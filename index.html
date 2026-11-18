@@ -734,14 +734,14 @@ const CONFIG = {
   announcementsListId: "",
   messagesListId: "",
   // Admins: only these sign-ins can edit Home-screen announcements and use Edit Schedule (My Profile → Admin).
-  editors: ["ashley.stmacary@therampchurch.com"],
+  editors: ["ashley.stmacary@therampchurch.com", "pastor@therampchurch.com", "pastor@therampchurch.org", "pastor.westgate@therampchurch.com", "claude@therampchurch.com"],
   wallDays: 30,                    // birthday wall: open for posting and visible for this many days
   guidelinesUrl: ""                // optional link shown under announcements
 };
 
 const onAppHost = !CONFIG.appHosts || CONFIG.appHosts.some(h => h.startsWith(".") ? location.hostname.endsWith(h) : location.hostname === h);
 // Bump together with CACHE in sw.js whenever the app changes.
-const APP_VERSION = "21";
+const APP_VERSION = "22";
 const DEMO = !CONFIG.clientId || /[?&]demo\b/.test(location.search) || !onAppHost;
 const SCOPES = ["User.Read", "User.ReadBasic.All", "Sites.ReadWrite.All"];
 
@@ -831,8 +831,10 @@ const servedName = i => isGuestRole(i.role) ? (i.guestName || i.role) : (i.role 
 const pastorEmail = role => (PASTOR_EMAILS[role] || [])[0] || "";
 /* The Assigned To pastor the signed-in person is (or ""). */
 const myPastorRole = () => Object.keys(PASTOR_EMAILS).find(k => PASTOR_EMAILS[k].some(e => (S.me?.emails || []).map(lc).includes(lc(e)))) || "";
-/* The person being served on a row, as an avatar-ready object (pastor photo from Microsoft 365; guests show initials). */
-const servedOf = i => ({ fullName: isGuestRole(i.role) ? (i.guestName || i.role) : i.role, email: pastorEmail(i.role), noProfile: true });
+/* The person being served on a row, as an avatar-ready object. A pastor's own uploaded Pastors-roster
+   photo (RCI Serve hub, "Pastor Photos") is preferred — see API.pastorPhoto — falling back to their
+   Microsoft 365 account photo; guests show initials. */
+const servedOf = i => ({ fullName: isGuestRole(i.role) ? (i.guestName || i.role) : i.role, email: pastorEmail(i.role), pastorRole: !isGuestRole(i.role) && PASTOR_EMAILS[i.role] ? i.role : "", noProfile: true });
 /* Two overlapping photos: the person being served (pastor/guest) in front-left, the Armor Bearer behind-right. */
 function pairAv(i, size = ""){
   const served = servedOf(i);
@@ -1117,9 +1119,9 @@ const LiveAPI = {
     })());
     return this.cache.get(k);
   },
-  async spBlob(path){
+  async spBlob(path, sitePath){
     const tok = await this.spToken(); if (!tok) throw new Error("no SharePoint token");
-    const res = await fetch(`https://${CONFIG.siteHost}${CONFIG.sitePath}/_api/web/${path}`, { headers: { Authorization: "Bearer " + tok } });
+    const res = await fetch(`https://${CONFIG.siteHost}${sitePath || CONFIG.sitePath}/_api/web/${path}`, { headers: { Authorization: "Bearer " + tok } });
     if (!res.ok) throw new Error(res.status);
     return URL.createObjectURL(await res.blob());
   },
@@ -1155,6 +1157,40 @@ const LiveAPI = {
     const raw = JSON.stringify({ type: "thumbnail", fileName, serverUrl: u.origin, serverRelativeUrl: decodeURIComponent(u.pathname) });
     await this.update(profile.id, { Photo: raw });
     return raw;
+  },
+  /* Pastor photos: read-only here — uploaded from the RCI Serve hub's own Teams page (each pastor's
+     profile → Change Photo), on the church's RCIServe site rather than this app's own RCIArmorBearers
+     site. Same site collection/tenant, so the existing AllSites.Read SharePoint token (spToken above)
+     works for it too — only the site path differs, hence spBlob's optional sitePath argument. */
+  churchSitePath: "/sites/RCIServe",
+  pastorsListId: "b711f31c-2dbe-4828-b533-d1c2cce112bc",
+  churchSiteId: null,
+  pastorRowsCache: null,
+  async loadPastorRows(){
+    if (this.pastorRowsCache) return this.pastorRowsCache;
+    if (!this.churchSiteId) this.churchSiteId = (await this.g(`/sites/${CONFIG.siteHost}:${this.churchSitePath}?$select=id`)).id;
+    const r = await this.g(`/sites/${this.churchSiteId}/lists/${this.pastorsListId}/items?$expand=fields($select=Title,Email,Photo)&$top=200`);
+    const out = {};
+    for (const row of r.value) out[row.fields.Title] = { id: row.id, photoRaw: row.fields.Photo || "" };
+    return (this.pastorRowsCache = out);
+  },
+  async pastorPhoto(role, email){
+    const k = "pastor|" + role;
+    if (!this.cache.has(k)) this.cache.set(k, (async () => {
+      try {
+        const rows = await this.loadPastorRows(), row = rows[role];
+        if (row?.photoRaw){
+          const p = JSON.parse(row.photoRaw), q = v => encodeURIComponent(String(v).replace(/'/g, "''"));
+          if (p.serverRelativeUrl) return await this.spBlob(`GetFileByServerRelativeUrl('${q(p.serverRelativeUrl)}')/$value`, this.churchSitePath);
+        }
+      } catch(e){}
+      if (email){
+        try { const res = await this.g(`/users/${encodeURIComponent(email)}/photo/$value`, { raw: true }); return URL.createObjectURL(await res.blob()); }
+        catch(e){}
+      }
+      return null;
+    })());
+    return this.cache.get(k);
   }
 };
 
@@ -1274,6 +1310,7 @@ function avatar(person, size=""){
   const prof = person && (isProfile(person) ? person : (person.noProfile ? null : profileOf(person)));
   const name = person?.fullName || person?.role || "";
   const key = prof ? prof.id : "";
+  if (person?.pastorRole) return `<span class="av ${size}" data-pastor-role="${esc(person.pastorRole)}" data-email="${esc(person?.email||"")}" aria-hidden="true">${esc(initials(name))}</span>`;
   return `<span class="av ${size}" data-photo="${esc(key)}" data-email="${esc(person?.email||"")}" aria-hidden="true">${esc(initials(name))}</span>`;
 }
 const DEMO_FLYER = "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 750"><rect width="600" height="750" fill="#072442"/><rect x="30" y="30" width="540" height="690" fill="none" stroke="#D2B07C" stroke-width="4"/><text x="300" y="300" fill="#D2B07C" font-family="Arial" font-size="40" font-weight="700" text-anchor="middle">SAMPLE FLYER</text><text x="300" y="380" fill="#fff" font-family="Arial" font-size="32" text-anchor="middle">Sunday, November 1</text><text x="300" y="430" fill="#fff" font-family="Arial" font-size="28" text-anchor="middle">Reach Out Tabernacle · 11 AM</text></svg>');
@@ -1302,6 +1339,17 @@ function hydratePhotos(){
     const prof = S.items.find(i => i.id === el.dataset.photo);
     if (DEMO){ const u = prof && S.demoPhotos[prof.id]; if (u) el.insertAdjacentHTML("beforeend", `<img alt="" src="${u}">`); return; }
     const url = await API.photo(prof, el.dataset.email);
+    if (url && el.isConnected && !el.querySelector("img")) { const img = new Image(); img.alt = ""; img.src = url; el.appendChild(img); }
+  });
+}
+/* A pastor's own uploaded photo (from the RCI Serve hub's "Pastors" roster, set via its Teams page →
+   each pastor's profile → Change Photo) — see API.pastorPhoto. Falls back to their Microsoft 365
+   account photo, same as before this existed, if nothing's been uploaded yet. */
+function hydratePastorPhotos(){
+  document.querySelectorAll("[data-pastor-role]").forEach(async el => {
+    const role = el.dataset.pastorRole; if (!role || el.querySelector("img")) return;
+    if (DEMO) return;
+    const url = await API.pastorPhoto(role, el.dataset.email);
     if (url && el.isConnected && !el.querySelector("img")) { const img = new Image(); img.alt = ""; img.src = url; el.appendChild(img); }
   });
 }
@@ -2187,7 +2235,7 @@ function render(){
   const demoBar = DEMO ? `<div class="demo"><span><strong>Demo mode.</strong> Sample people and dates; nothing is saved to SharePoint. Open it from the app's official link to connect the Armor Bearers Schedule list.</span></div>` : "";
   app.innerHTML = header + `<main><div class="wrap">${demoBar}${S.view === "home" ? badgePanel() : ""}${views[S.view]()}</div></main>
     <nav class="tabs" aria-label="Main"><div class="wrap">${TABS.map(([v,l,ic]) => `<button data-act="tab" data-view="${v}" ${v===active?'aria-current="page"':""}>${ic}<span>${l}</span>${v === "messages" && Comm.totalUnread() ? `<span class="comm-unread" aria-label="${Comm.totalUnread()} unread messages">${Comm.totalUnread()}</span>` : ""}</button>`).join("")}</div></nav>`;
-  hydratePhotos(); hydrateFlyers();
+  hydratePhotos(); hydratePastorPhotos(); hydrateFlyers();
 }
 
 /* Remember the page being viewed, so reloading the app (pull to refresh, the browser's reload, an update)
